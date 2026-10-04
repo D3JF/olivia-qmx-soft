@@ -1,0 +1,36 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "Test X11 forwarding",
+            "type": "shell",
+            "command": "if [ -n \"$DISPLAY\" ]; then xdpyinfo >/dev/null && echo \"X11 forwarding works on $DISPLAY\"; else echo \"DISPLAY is empty. Reconnect VS Code after starting VcXsrv and enabling X11 forwarding.\"; exit 1; fi",
+            "problemMatcher": []
+        },
+        {
+            "label": "Run Olivia QMX+ GUI",
+            "type": "shell",
+            "command": "if [ -z \"$DISPLAY\" ]; then echo \"DISPLAY is empty. Run this from the SSH terminal that has X11 forwarding, or reconnect VS Code through that SSH session.\"; exit 1; fi; QT_QPA_PLATFORM=xcb \"${workspaceFolder}/.venv/bin/python\" \"${workspaceFolder}/olivia_qmx.py\"",
+            "dependsOn": "Test X11 forwarding",
+            "problemMatcher": []
+        },
+        {
+            "label": "Run Olivia simulator Station A",
+            "type": "shell",
+            "command": "if [ -z \"$DISPLAY\" ]; then echo \"DISPLAY is empty. Run this from the SSH terminal that has X11 forwarding.\"; exit 1; fi; OLIVIA_QMX_SIMULATOR=1 OLIVIA_QMX_STATION=A QT_QPA_PLATFORM=xcb \"${workspaceFolder}/.venv/bin/python\" \"${workspaceFolder}/olivia_qmx.py\"",
+            "problemMatcher": []
+        },
+        {
+            "label": "Run Olivia simulator Station B",
+            "type": "shell",
+            "command": "if [ -z \"$DISPLAY\" ]; then echo \"DISPLAY is empty. Run this from the SSH terminal that has X11 forwarding.\"; exit 1; fi; OLIVIA_QMX_SIMULATOR=1 OLIVIA_QMX_STATION=B QT_QPA_PLATFORM=xcb \"${workspaceFolder}/.venv/bin/python\" \"${workspaceFolder}/olivia_qmx.py\"",
+            "problemMatcher": []
+        },
+        {
+            "label": "Run Olivia unit tests",
+            "type": "shell",
+            "command": "QT_QPA_PLATFORM=offscreen \"${workspaceFolder}/.venv/bin/python\" -m unittest -v \"${workspaceFolder}/test_olivia_qmx.py\" \"${workspaceFolder}/test_olivia_modem.py\"",
+            "problemMatcher": []
+        }
+    ]
+}

@@ -1,0 +1,12 @@
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Local reference checkout; keep the MVP repository self-contained.
+olivia-python/
+
+# Local editor and OS files.
+.vscode/*.log
+.DS_Store
+Thumbs.db
