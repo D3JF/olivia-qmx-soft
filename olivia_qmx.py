@@ -51,6 +51,13 @@ def station_port(station: str, channel_port: int) -> int:
     return channel_port + (1 if station == "A" else 2)
 
 
+def target_station_port(station: str, channel_port: int) -> int:
+    """Return the simulator UDP port for the station being contacted."""
+    if station not in ("A", "B"):
+        raise ValueError("Simulator station must be A or B.")
+    return station_port("B" if station == "A" else "A", channel_port)
+
+
 def qmx_port() -> str:
     """Return the first serial device identified as a QRP Labs QMX+."""
     for port in list_ports.comports():
@@ -255,8 +262,8 @@ class RadioWorker(QObject):
                     self.status.emit("Simulator transmitting...")
                     samples = self._codec.encode(message)
                     if self._station_id:
-                        target_port = self._channel_port + (
-                            2 if self._station_id == "A" else 1
+                        target_port = target_station_port(
+                            self._station_id, self._channel_port
                         )
                         assert self._simulated_socket is not None
                         self._simulated_tx_id += 1

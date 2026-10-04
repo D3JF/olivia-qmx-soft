@@ -189,6 +189,14 @@ class OliviaQmxTests(unittest.TestCase):
         self.assertEqual(app.station_port("A", 45800), 45801)
         self.assertEqual(app.station_port("B", 45800), 45802)
 
+    def test_target_station_port_routes_both_directions(self):
+        self.assertEqual(app.target_station_port("A", 45800), 45802)
+        self.assertEqual(app.target_station_port("B", 45800), 45801)
+
+    def test_target_station_port_rejects_invalid_station(self):
+        with self.assertRaisesRegex(ValueError, "must be A or B"):
+            app.target_station_port("C", 45800)
+
     def test_station_port_rejects_invalid_station(self):
         with self.assertRaisesRegex(ValueError, "must be A or B"):
             app.station_port("C", 45800)
