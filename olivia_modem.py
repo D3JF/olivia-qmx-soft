@@ -159,7 +159,7 @@ class OliviaModem:
             )
             bins = [
                 int(
-                    (start_frequency + self._tone_spacing * (tone + 1))
+                    (start_frequency + self._tone_spacing * tone)
                     * self._symbol_samples
                     / self.sample_rate
                 )

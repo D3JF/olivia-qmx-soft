@@ -13,6 +13,7 @@ import os
 import queue
 import socket
 import struct
+import time
 from typing import Any, Iterable, Optional
 
 import numpy as np
@@ -37,6 +38,9 @@ SAMPLE_RATE = 8000
 CHANNELS = 1
 BAUD_RATE = 115200
 SERIAL_COMMANDS = (b"FA00007040000;", b"MD2;")
+SIMULATOR_PACKET_BYTES = 8 * 1024
+SIMULATOR_RECEIVE_BUFFER_BYTES = 4 * 1024 * 1024
+SIMULATOR_PACKET_DELAY_SECONDS = 0.005
 
 
 def normalize_transmit_text(message: str) -> str:
@@ -144,6 +148,11 @@ class RadioWorker(QObject):
                     listen_port = station_port(self._station_id, self._channel_port)
                     self._simulated_socket = socket.socket(
                         socket.AF_INET, socket.SOCK_DGRAM
+                    )
+                    self._simulated_socket.setsockopt(
+                        socket.SOL_SOCKET,
+                        socket.SO_RCVBUF,
+                        SIMULATOR_RECEIVE_BUFFER_BYTES,
                     )
                     self._simulated_socket.settimeout(0.2)
                     try:
@@ -267,7 +276,7 @@ class RadioWorker(QObject):
                         )
                         assert self._simulated_socket is not None
                         self._simulated_tx_id += 1
-                        chunk_size = 1024
+                        chunk_size = SIMULATOR_PACKET_BYTES
                         chunks = [
                             samples[start : start + chunk_size].astype(np.float32).tobytes()
                             for start in range(0, len(samples), chunk_size)
@@ -283,6 +292,7 @@ class RadioWorker(QObject):
                                 ) + chunk,
                                 ("127.0.0.1", target_port),
                             )
+                            time.sleep(SIMULATOR_PACKET_DELAY_SECONDS)
                         self.status.emit(
                             f"Station {self._station_id} transmitted; receiving"
                         )

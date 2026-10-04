@@ -303,6 +303,11 @@ class OliviaQmxTests(unittest.TestCase):
             samples.append(worker._simulated_rx.get_nowait())
         self.assertEqual(samples, [[2.0, 2.0]])
 
+    def test_simulator_packet_size_is_suitable_for_long_messages(self):
+        self.assertEqual(app.SIMULATOR_PACKET_BYTES, 8192)
+        self.assertGreater(app.SIMULATOR_RECEIVE_BUFFER_BYTES, 3_000_000)
+        self.assertGreater(app.SIMULATOR_PACKET_DELAY_SECONDS, 0)
+
 
 if __name__ == "__main__":
     unittest.main()

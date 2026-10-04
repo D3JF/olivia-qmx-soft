@@ -66,6 +66,14 @@ class OliviaModemTests(unittest.TestCase):
         message = "Olivia MFSK over simulated QMX+; " * 20
         self.assertEqual(self.round_trip(message), message)
 
+    def test_long_realistic_message_round_trip(self):
+        message = (
+            "Lorem ipsum dolor sit amet, consectetur adipiscing elit. "
+            "Sed do eiusmod tempor incididunt ut labore et dolore magna "
+            "aliqua enim ad minim veniam."
+        )
+        self.assertEqual(self.round_trip(message), message)
+
     def test_decoder_handles_one_sample_chunks(self):
         message = "Chunked RX"
         self.assertEqual(self.round_trip(message, chunk_size=1), message)
