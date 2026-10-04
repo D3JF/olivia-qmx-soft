@@ -201,6 +201,12 @@ class OliviaQmxTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "must be A or B"):
             app.station_port("C", 45800)
 
+    def test_station_listening_status_is_clear_after_transmission(self):
+        self.assertEqual(
+            app.station_listening_status("A"),
+            "Station A transmitted; listening",
+        )
+
     def test_qmx_port_detects_qrp_labs_device(self):
         ports = [
             Port("/dev/ttyUSB0", description="USB UART"),
@@ -293,6 +299,8 @@ class OliviaQmxTests(unittest.TestCase):
         import queue
 
         worker = app.RadioWorker()
+        statuses = []
+        worker.status.connect(statuses.append)
         worker._codec = app.OliviaCodec()
         worker._rx_codec = app.OliviaCodec()
         worker._simulator = True
@@ -302,12 +310,13 @@ class OliviaQmxTests(unittest.TestCase):
         while not worker._simulated_rx.empty():
             samples.append(worker._simulated_rx.get_nowait())
         self.assertEqual(samples, [[2.0, 2.0]])
+        self.assertEqual(statuses, ["Simulator transmitting...", "Simulator receiving"])
+        self.assertNotIn("Receiving", statuses)
 
     def test_simulator_packet_size_is_suitable_for_long_messages(self):
         self.assertEqual(app.SIMULATOR_PACKET_BYTES, 8192)
         self.assertGreater(app.SIMULATOR_RECEIVE_BUFFER_BYTES, 3_000_000)
         self.assertGreater(app.SIMULATOR_PACKET_DELAY_SECONDS, 0)
-
 
 if __name__ == "__main__":
     unittest.main()

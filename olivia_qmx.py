@@ -62,6 +62,11 @@ def target_station_port(station: str, channel_port: int) -> int:
     return station_port("B" if station == "A" else "A", channel_port)
 
 
+def station_listening_status(station: str) -> str:
+    """Describe a station after its transmission has completed."""
+    return f"Station {station} transmitted; listening"
+
+
 def qmx_port() -> str:
     """Return the first serial device identified as a QRP Labs QMX+."""
     for port in list_ports.comports():
@@ -293,9 +298,7 @@ class RadioWorker(QObject):
                                 ("127.0.0.1", target_port),
                             )
                             time.sleep(SIMULATOR_PACKET_DELAY_SECONDS)
-                        self.status.emit(
-                            f"Station {self._station_id} transmitted; receiving"
-                        )
+                        self.status.emit(station_listening_status(self._station_id))
                     else:
                         for start in range(0, len(samples), 1024):
                             self._simulated_rx.put(samples[start : start + 1024])
@@ -325,7 +328,8 @@ class RadioWorker(QObject):
                         self._serial.flush()
                     except serial.SerialException as exc:
                         self.error.emit(f"Could not return QMX+ to RX: {exc}")
-                self.status.emit("Receiving")
+                if not self._simulator:
+                    self.status.emit("Receiving")
 
     @pyqtSlot()
     def stop(self) -> None:
