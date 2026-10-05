@@ -128,7 +128,8 @@ with the Qt `bin` directory on `PATH`:
 ```powershell
 cmake -S . -B build-windows -G Ninja `
   -DCMAKE_BUILD_TYPE=Release `
-  -DOLIVIA_AUDIO=OFF `
+  -DOLIVIA_AUDIO=ON `
+  -DPORTAUDIO_ROOT="C:\path\to\portaudio" `
   -DOLIVIA_BUILD_INSTALLER=ON
 cmake --build build-windows
 cpack --config build-windows/CPackConfig.cmake
@@ -136,6 +137,7 @@ cpack --config build-windows/CPackConfig.cmake
 
 This creates an NSIS installer in `build-windows`. The installer deploys the
 Qt and MinGW runtime DLLs alongside `olivia_gui.exe`, and installs the
-simulator and serial-information tools in the same directory. Set
-`OLIVIA_AUDIO=ON` and provide `PORTAUDIO_ROOT` when building a package for
-real USB audio use; otherwise the installer is the simulator-only edition.
+simulator, real-mode GUI, and serial/audio-information tools in the same
+directory. The PortAudio SDK must provide `include\portaudio.h`,
+`lib\libportaudio.dll.a` (or `portaudio.lib`), and the matching
+`libportaudio.dll`.
