@@ -8,28 +8,37 @@
             "problemMatcher": []
         },
         {
-            "label": "Run Olivia QMX+ GUI",
+            "label": "Configure C++ build",
             "type": "shell",
-            "command": "if [ -z \"$DISPLAY\" ]; then echo \"DISPLAY is empty. Run this from the SSH terminal that has X11 forwarding, or reconnect VS Code through that SSH session.\"; exit 1; fi; QT_QPA_PLATFORM=xcb \"${workspaceFolder}/.venv/bin/python\" \"${workspaceFolder}/olivia_qmx.py\"",
-            "dependsOn": "Test X11 forwarding",
+            "command": "cmake -S \"${workspaceFolder}\" -B \"${workspaceFolder}/build\" -DBUILD_TESTING=ON",
+            "problemMatcher": []
+        },
+        {
+            "label": "Build C++ application",
+            "type": "shell",
+            "command": "cmake --build \"${workspaceFolder}/build\"",
+            "dependsOn": "Configure C++ build",
+            "problemMatcher": []
+        },
+        {
+            "label": "Run C++ tests",
+            "type": "shell",
+            "command": "ctest --test-dir \"${workspaceFolder}/build\" --output-on-failure",
+            "dependsOn": "Build C++ application",
             "problemMatcher": []
         },
         {
             "label": "Run Olivia simulator Station A",
             "type": "shell",
-            "command": "if [ -z \"$DISPLAY\" ]; then echo \"DISPLAY is empty. Run this from the SSH terminal that has X11 forwarding.\"; exit 1; fi; OLIVIA_QMX_SIMULATOR=1 OLIVIA_QMX_STATION=A QT_QPA_PLATFORM=xcb \"${workspaceFolder}/.venv/bin/python\" \"${workspaceFolder}/olivia_qmx.py\"",
+            "command": "\"${workspaceFolder}/build/olivia_app\" --station A",
+            "dependsOn": "Build C++ application",
             "problemMatcher": []
         },
         {
             "label": "Run Olivia simulator Station B",
             "type": "shell",
-            "command": "if [ -z \"$DISPLAY\" ]; then echo \"DISPLAY is empty. Run this from the SSH terminal that has X11 forwarding.\"; exit 1; fi; OLIVIA_QMX_SIMULATOR=1 OLIVIA_QMX_STATION=B QT_QPA_PLATFORM=xcb \"${workspaceFolder}/.venv/bin/python\" \"${workspaceFolder}/olivia_qmx.py\"",
-            "problemMatcher": []
-        },
-        {
-            "label": "Run Olivia unit tests",
-            "type": "shell",
-            "command": "QT_QPA_PLATFORM=offscreen \"${workspaceFolder}/.venv/bin/python\" -m unittest -v \"${workspaceFolder}/test_olivia_qmx.py\" \"${workspaceFolder}/test_olivia_modem.py\"",
+            "command": "\"${workspaceFolder}/build/olivia_app\" --station B",
+            "dependsOn": "Build C++ application",
             "problemMatcher": []
         }
     ]
