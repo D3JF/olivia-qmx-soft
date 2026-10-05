@@ -9,6 +9,7 @@
 #include <QFormLayout>
 #include <QGroupBox>
 #include <QHBoxLayout>
+#include <QImage>
 #include <QLabel>
 #include <QMainWindow>
 #include <QMessageBox>
@@ -52,14 +53,23 @@ public:
     explicit SpectrumWidget(QWidget* parent = nullptr) : QWidget(parent) {
         setMinimumHeight(140);
         setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
+        waterfall_ = QImage(768, 180, QImage::Format_RGB32);
+        clear();
     }
 
     void set_samples(const QVector<float>& samples) {
-        const int copy_count =
-            std::min(spectrum_size, static_cast<int>(samples.size()));
-        samples_.fill(0.0F, spectrum_size);
-        std::copy(samples.end() - copy_count, samples.end(),
-                  samples_.begin() + (spectrum_size - copy_count));
+        pending_samples_ += samples;
+        while (pending_samples_.size() >= spectrum_size) {
+            append_spectrum_column(pending_samples_.constData(),
+                                   spectrum_size);
+            pending_samples_.remove(0, spectrum_hop);
+        }
+        update();
+    }
+
+    void clear() {
+        pending_samples_.clear();
+        waterfall_.fill(QColor(QStringLiteral("#101820")));
         update();
     }
 
@@ -74,18 +84,38 @@ protected:
         painter.fillRect(rect(), QColor(QStringLiteral("#101820")));
         painter.setRenderHint(QPainter::Antialiasing);
 
-        const QRect plot = rect().adjusted(36, 10, -12, -24);
+        const QRect plot = rect().adjusted(58, 12, -18, -38);
         painter.setPen(QColor(QStringLiteral("#52606d")));
         painter.drawRect(plot);
         if (plot.width() < 2 || plot.height() < 2) {
             return;
         }
+        painter.drawImage(plot, waterfall_);
 
+        painter.setPen(QColor(QStringLiteral("#d0d7de")));
+        painter.drawText(6, 20, QStringLiteral("TX waterfall"));
+        painter.drawText(plot.left(), height() - 10, QStringLiteral("Time"));
+        painter.drawText(plot.right() - 56, height() - 10,
+                         QStringLiteral("now"));
+        painter.drawText(6, plot.top() + 12, QStringLiteral("4 kHz"));
+        painter.drawText(10, plot.center().y() + 5, QStringLiteral("2 kHz"));
+        painter.drawText(18, plot.bottom(), QStringLiteral("0"));
+        painter.save();
+        painter.translate(13, plot.center().y());
+        painter.rotate(-90);
+        painter.drawText(0, 0, QStringLiteral("Frequency (Hz)"));
+        painter.restore();
+        painter.drawText(plot.right() - 105, height() - 10,
+                         QStringLiteral("BW %1 Hz").arg(bandwidth_));
+    }
+
+private:
+    void append_spectrum_column(const float* samples, int count) {
         std::vector<std::complex<double>> spectrum(spectrum_size);
-        for (int index = 0; index < spectrum_size; ++index) {
+        for (int index = 0; index < count; ++index) {
             const double window =
                 0.5 - 0.5 * std::cos(2.0 * pi * index / spectrum_size);
-            spectrum[index] = samples_[index] * window;
+            spectrum[index] = samples[index] * window;
         }
         for (int length = 2; length <= spectrum_size; length *= 2) {
             for (int start = 0; start < spectrum_size; start += length) {
@@ -101,38 +131,32 @@ protected:
                 }
             }
         }
-
-        QPolygonF curve;
-        curve.reserve(spectrum_size / 2);
-        for (int index = 1; index < spectrum_size / 2; ++index) {
+        QImage shifted(waterfall_.size(), waterfall_.format());
+        shifted.fill(QColor(QStringLiteral("#101820")));
+        {
+            QPainter painter(&shifted);
+            painter.drawImage(-1, 0, waterfall_);
+        }
+        waterfall_ = std::move(shifted);
+        for (int y = 0; y < waterfall_.height(); ++y) {
+            const int bin = (waterfall_.height() - 1 - y) *
+                            (spectrum_size / 2 - 1) /
+                            (waterfall_.height() - 1);
             const double magnitude =
-                std::abs(spectrum[index]) / spectrum_size;
+                std::abs(spectrum[bin]) / spectrum_size;
             const double level =
                 std::clamp((20.0 * std::log10(magnitude + 1.0e-6) + 80.0) /
                                80.0,
                            0.0, 1.0);
-            const double frequency =
-                static_cast<double>(index) * sample_rate / spectrum_size;
-            const double x =
-                plot.left() + (frequency / sample_rate) * plot.width();
-            const double y = plot.bottom() - level * plot.height();
-            curve.append(QPointF(x, y));
+            waterfall_.setPixelColor(
+                waterfall_.width() - 1, y,
+                QColor::fromHsvF(0.66 - 0.66 * level, 0.9, 0.2 + 0.8 * level));
         }
-        painter.setPen(QPen(QColor(QStringLiteral("#43d17a")), 1.5));
-        painter.drawPolyline(curve);
-
-        painter.setPen(QColor(QStringLiteral("#d0d7de")));
-        painter.drawText(6, 20, QStringLiteral("Spectrum"));
-        painter.drawText(plot.left(), height() - 6,
-                         QStringLiteral("0 Hz"));
-        painter.drawText(plot.right() - 70, height() - 6,
-                         QStringLiteral("%1 kHz").arg(sample_rate / 1000));
-        painter.drawText(plot.center().x() - 42, height() - 6,
-                         QStringLiteral("BW %1 Hz").arg(bandwidth_));
     }
 
-private:
-    QVector<float> samples_ = QVector<float>(spectrum_size, 0.0F);
+    static constexpr int spectrum_hop = 128;
+    QVector<float> pending_samples_;
+    QImage waterfall_;
     int bandwidth_ = 250;
 };
 
@@ -464,6 +488,7 @@ private:
                                                   QStringLiteral("\n"));
         outgoing_text_->clear();
         if (!message.trimmed().isEmpty()) {
+            waterfall_->clear();
             emit transmit_requested(message, tone_group_->checkedId(),
                                     bandwidth_group_->checkedId());
         }
