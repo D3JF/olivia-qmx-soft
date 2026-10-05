@@ -103,6 +103,25 @@ On Ubuntu, install PortAudio with:
 sudo apt install libportaudio2 portaudio19-dev
 ```
 
+The C++ build detects PortAudio through `pkg-config` and builds the reusable
+`olivia_audio` backend when the development package is present. It enumerates
+the system's mono-capable input/output devices, identifies a QMX+ device by
+`QMX` or `QRP Labs` in its name, opens 8 kHz float32 streams, queues transmit
+samples for playback, and delivers captured samples on a non-audio worker
+thread. Audio callbacks do not run the Olivia decoder directly, avoiding
+blocking or allocation-heavy modem work in the PortAudio callback.
+
+Audio backend selection is controlled by CMake:
+
+```bash
+cmake -S . -B build -DOLIVIA_AUDIO=AUTO
+```
+
+Use `OLIVIA_AUDIO=OFF` for a codec/simulator-only build. For a Windows
+PortAudio SDK, set `PORTAUDIO_ROOT` to its installation prefix; the same C++
+backend is then used with the Windows PortAudio library instead of Linux
+`pkg-config`.
+
 The graphical app also needs an X11 display. When I run it from a remote
 Ubuntu machine, I use VcXsrv on Windows and connect with SSH X11 forwarding.
 The VS Code terminal must actually have a non-empty `DISPLAY` variable.
