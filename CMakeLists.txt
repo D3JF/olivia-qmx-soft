@@ -1,8 +1,13 @@
 cmake_minimum_required(VERSION 3.16)
 
-project(olivia_qmx_cpp LANGUAGES CXX)
+project(olivia_qmx_cpp VERSION 0.1.0 LANGUAGES CXX)
 
 include(CTest)
+include(GNUInstallDirs)
+
+option(OLIVIA_BUILD_INSTALLER
+    "Prepare a Windows installer with Qt and compiler runtimes"
+    ${WIN32})
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -96,11 +101,16 @@ endif()
 find_package(Qt5 COMPONENTS Widgets Network QUIET)
 if(Qt5_FOUND)
     set(CMAKE_AUTOMOC ON)
+    set(CMAKE_AUTORCC ON)
     add_executable(olivia_gui
         cpp/src/olivia_gui.cpp
+        resources/olivia.qrc
     )
         if(WIN32)
-            set_target_properties(olivia_gui PROPERTIES WIN32_EXECUTABLE TRUE)
+            set_target_properties(olivia_gui PROPERTIES
+                WIN32_EXECUTABLE TRUE
+                RC_FILE "${CMAKE_SOURCE_DIR}/resources/olivia.rc"
+            )
         endif()
         target_link_libraries(olivia_gui PRIVATE
         olivia_core
@@ -139,3 +149,92 @@ if(BUILD_TESTING)
     target_link_libraries(olivia_serial_tests PRIVATE olivia_serial)
     add_test(NAME olivia_serial_tests COMMAND olivia_serial_tests)
 endif()
+
+install(TARGETS olivia_app olivia_serial_info
+    RUNTIME DESTINATION .
+)
+if(TARGET olivia_gui)
+    install(TARGETS olivia_gui
+        RUNTIME DESTINATION .
+    )
+endif()
+if(TARGET olivia_audio_info)
+    install(TARGETS olivia_audio_info
+        RUNTIME DESTINATION .
+    )
+endif()
+install(FILES
+    README.md
+    LICENSE
+    DESTINATION .
+)
+
+if(WIN32 AND OLIVIA_BUILD_INSTALLER)
+    find_program(WINDEPLOYQT_EXECUTABLE
+        NAMES windeployqt windeployqt.exe
+        HINTS
+            "${Qt5Core_DIR}/../../../bin"
+    )
+    if(NOT WINDEPLOYQT_EXECUTABLE)
+        message(FATAL_ERROR
+            "OLIVIA_BUILD_INSTALLER=ON requires Qt's windeployqt in PATH "
+            "or next to the Qt installation.")
+    endif()
+    if(NOT TARGET olivia_gui)
+        message(FATAL_ERROR
+            "OLIVIA_BUILD_INSTALLER=ON requires Qt5 and the olivia_gui target.")
+    endif()
+    if(TARGET olivia_audio)
+        if(NOT PORTAUDIO_ROOT)
+            message(FATAL_ERROR
+                "The audio installer requires PORTAUDIO_ROOT so its DLL can "
+                "be copied next to the application.")
+        endif()
+        find_file(OLIVIA_PORTAUDIO_DLL
+            NAMES libportaudio.dll portaudio.dll
+            HINTS
+                "${PORTAUDIO_ROOT}/bin"
+                "${PORTAUDIO_ROOT}"
+            NO_DEFAULT_PATH
+        )
+        if(NOT OLIVIA_PORTAUDIO_DLL)
+            message(FATAL_ERROR
+                "Could not find the PortAudio DLL below PORTAUDIO_ROOT.")
+        endif()
+        install(FILES "${OLIVIA_PORTAUDIO_DLL}" DESTINATION .)
+    endif()
+
+    install(CODE "
+        execute_process(
+            COMMAND \"${WINDEPLOYQT_EXECUTABLE}\"
+                --no-translations
+                --compiler-runtime
+                \"\\\${CMAKE_INSTALL_PREFIX}/olivia_gui.exe\"
+            RESULT_VARIABLE deploy_result
+        )
+        if(deploy_result)
+            message(FATAL_ERROR
+                \"windeployqt failed with exit code \\\${deploy_result}\")
+        endif()
+    ")
+endif()
+
+set(CPACK_PACKAGE_NAME "Olivia QMX+")
+set(CPACK_PACKAGE_VENDOR "D3JF")
+set(CPACK_PACKAGE_DESCRIPTION_SUMMARY
+    "Olivia MFSK terminal for the QRP Labs QMX+")
+set(CPACK_PACKAGE_INSTALL_DIRECTORY "Olivia QMX+")
+set(CPACK_RESOURCE_FILE_LICENSE "${CMAKE_SOURCE_DIR}/LICENSE")
+set(CPACK_PACKAGE_VERSION "${PROJECT_VERSION}")
+if(WIN32)
+    set(CPACK_GENERATOR "NSIS")
+    set(CPACK_NSIS_DISPLAY_NAME "Olivia QMX+")
+    set(CPACK_NSIS_PACKAGE_NAME "Olivia QMX+")
+    set(CPACK_NSIS_HELP_LINK
+        "https://github.com/D3JF/olivia-qmx-soft")
+    set(CPACK_NSIS_URL_INFO_ABOUT
+        "https://github.com/D3JF/olivia-qmx-soft")
+    set(CPACK_NSIS_MODIFY_PATH OFF)
+    set(CPACK_NSIS_MENU_LINKS "olivia_gui.exe" "Olivia QMX+")
+endif()
+include(CPack)

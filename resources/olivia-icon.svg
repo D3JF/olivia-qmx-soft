@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024"
+     viewBox="0 0 1024 1024" role="img" aria-labelledby="title desc">
+  <title id="title">Olivia MFSK icon</title>
+  <desc id="desc">Eight separated Olivia MFSK tone bars with a carrier accent on a dark blue background.</desc>
+  <rect x="32" y="32" width="960" height="960" rx="220" fill="#0b1d3d"/>
+  <rect x="56" y="56" width="912" height="912" rx="198"
+        fill="none" stroke="#3b6da3" stroke-opacity=".42" stroke-width="8"/>
+
+  <g fill="#57e1d1">
+    <rect x="190" y="510" width="58" height="174" rx="29"/>
+    <rect x="278" y="450" width="58" height="234" rx="29"/>
+    <rect x="366" y="398" width="58" height="286" rx="29"/>
+    <rect x="454" y="350" width="58" height="334" rx="29" fill="#43c7ef"/>
+    <rect x="542" y="398" width="58" height="286" rx="29"/>
+    <rect x="630" y="450" width="58" height="234" rx="29"/>
+    <rect x="718" y="510" width="58" height="174" rx="29"/>
+  </g>
+  <rect x="806" y="570" width="58" height="114" rx="29" fill="#f5a83b"/>
+  <circle cx="835" cy="516" r="24" fill="#fff4d2"/>
+</svg>

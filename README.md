@@ -118,3 +118,24 @@ been verified on physical hardware here.
 The former Python implementation is preserved on the
 [`python-legacy`](https://github.com/D3JF/olivia-qmx-soft/tree/python-legacy)
 branch and is not part of the maintained C++ application.
+
+## Windows installer
+
+On Windows 10 x64, install CMake, Ninja, NSIS, a C++17 compiler, and Qt5
+(including `windeployqt`). Configure the project from a developer PowerShell
+with the Qt `bin` directory on `PATH`:
+
+```powershell
+cmake -S . -B build-windows -G Ninja `
+  -DCMAKE_BUILD_TYPE=Release `
+  -DOLIVIA_AUDIO=OFF `
+  -DOLIVIA_BUILD_INSTALLER=ON
+cmake --build build-windows
+cpack --config build-windows/CPackConfig.cmake
+```
+
+This creates an NSIS installer in `build-windows`. The installer deploys the
+Qt and MinGW runtime DLLs alongside `olivia_gui.exe`, and installs the
+simulator and serial-information tools in the same directory. Set
+`OLIVIA_AUDIO=ON` and provide `PORTAUDIO_ROOT` when building a package for
+real USB audio use; otherwise the installer is the simulator-only edition.

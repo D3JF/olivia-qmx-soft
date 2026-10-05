@@ -18,6 +18,7 @@
 #include <QGroupBox>
 #include <QHBoxLayout>
 #include <QImage>
+#include <QIcon>
 #include <QLabel>
 #include <QMainWindow>
 #include <QMessageBox>
@@ -894,6 +895,7 @@ std::optional<RealDeviceSelection> choose_real_devices() {
 
 int main(int argc, char** argv) {
     QApplication application(argc, argv);
+    application.setWindowIcon(QIcon(QStringLiteral(":/icons/olivia.svg")));
     qRegisterMetaType<QVector<float>>("QVector<float>");
     QCommandLineParser parser;
     parser.setApplicationDescription(

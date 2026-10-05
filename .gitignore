@@ -19,3 +19,6 @@ Thumbs.db
 
 # Locally generated images.
 *.jpg
+
+# Locally generated Windows installers.
+Olivia-QMX+-*-win64-setup.exe
