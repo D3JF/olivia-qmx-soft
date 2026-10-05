@@ -1,4 +1,7 @@
 #include "olivia_modem.hpp"
+#ifdef OLIVIA_HAS_PORTAUDIO
+#include "real_worker.hpp"
+#endif
 #include "serial_port.hpp"
 #ifdef OLIVIA_HAS_PORTAUDIO
 #include "audio_backend.hpp"
@@ -608,6 +611,129 @@ private:
     QButtonGroup* bandwidth_group_ = nullptr;
 };
 
+#ifdef OLIVIA_HAS_PORTAUDIO
+class RealWindow final : public QMainWindow {
+    Q_OBJECT
+
+public:
+    explicit RealWindow(const RealDeviceSelection& selection)
+        : thread_(new QThread(this)),
+          worker_(new olivia::RealWorker(
+              {selection.serial_path.toStdString(), selection.audio_input,
+               selection.audio_output},
+              nullptr)) {
+        worker_->moveToThread(thread_);
+        setWindowTitle(QStringLiteral("Olivia MFSK - QMX+"));
+        resize(640, 480);
+
+        received_text_ = new QPlainTextEdit;
+        received_text_->setReadOnly(true);
+        received_text_->setPlaceholderText(QStringLiteral("Received text"));
+        outgoing_text_ = new QPlainTextEdit;
+        outgoing_text_->setPlaceholderText(
+            QStringLiteral("Message to transmit"));
+        transmit_button_ = new QPushButton(QStringLiteral("TRANSMIT"));
+        connection_button_ = new QPushButton(QStringLiteral("Disconnect"));
+        clear_button_ = new QPushButton(QStringLiteral("Clear received"));
+
+        auto* central = new QWidget;
+        auto* layout = new QVBoxLayout(central);
+        layout->addWidget(new QLabel(
+            QStringLiteral("Real mode: %1 | audio input %2 | output %3")
+                .arg(selection.serial_path)
+                .arg(selection.audio_input)
+                .arg(selection.audio_output)));
+        layout->addWidget(received_text_, 3);
+        layout->addWidget(outgoing_text_, 1);
+        layout->addWidget(connection_button_);
+        layout->addWidget(transmit_button_);
+        layout->addWidget(clear_button_);
+        setCentralWidget(central);
+        transmit_button_->setEnabled(false);
+        statusBar()->showMessage(QStringLiteral("Starting QMX+..."));
+
+        connect(connection_button_, &QPushButton::clicked, this,
+                &RealWindow::toggle_connection);
+        connect(transmit_button_, &QPushButton::clicked, this,
+                &RealWindow::transmit);
+        connect(clear_button_, &QPushButton::clicked, received_text_,
+                &QPlainTextEdit::clear);
+        connect(thread_, &QThread::started, worker_, &olivia::RealWorker::start);
+        connect(thread_, &QThread::finished, worker_, &QObject::deleteLater);
+        connect(this, &RealWindow::stop_requested, worker_,
+                &olivia::RealWorker::stop);
+        connect(this, &RealWindow::transmit_requested, worker_,
+                &olivia::RealWorker::transmit);
+        connect(worker_, &olivia::RealWorker::connected, this,
+                &RealWindow::connection_changed);
+        connect(worker_, &olivia::RealWorker::received, this,
+                &RealWindow::show_received);
+        connect(worker_, &olivia::RealWorker::status, this,
+                [this](const QString& message) {
+                    statusBar()->showMessage(message);
+                });
+        connect(worker_, &olivia::RealWorker::error, this,
+                [this](const QString& message) {
+                    statusBar()->showMessage(message);
+                    QMessageBox::warning(this, QStringLiteral("QMX+ error"),
+                                         message);
+                });
+        thread_->start();
+    }
+
+    ~RealWindow() override {
+        if (thread_->isRunning()) {
+            QMetaObject::invokeMethod(worker_, "stop",
+                                      Qt::BlockingQueuedConnection);
+        }
+        thread_->quit();
+        thread_->wait();
+        worker_ = nullptr;
+    }
+
+signals:
+    void stop_requested();
+    void transmit_requested(const QString& message);
+
+private:
+    void toggle_connection() {
+        emit stop_requested();
+        connection_button_->setEnabled(false);
+    }
+
+    void transmit() {
+        const auto message =
+            outgoing_text_->toPlainText().replace(QStringLiteral("\\n"),
+                                                  QStringLiteral("\n"));
+        outgoing_text_->clear();
+        if (!message.trimmed().isEmpty()) {
+            emit transmit_requested(message);
+        }
+    }
+
+    void connection_changed(bool connected) {
+        connection_button_->setEnabled(connected);
+        transmit_button_->setEnabled(connected);
+        if (!connected) {
+            connection_button_->setText(QStringLiteral("Disconnected"));
+        }
+    }
+
+    void show_received(const QString& message) {
+        received_text_->moveCursor(QTextCursor::End);
+        received_text_->insertPlainText(message);
+    }
+
+    QThread* thread_;
+    olivia::RealWorker* worker_;
+    QPushButton* connection_button_;
+    QPushButton* transmit_button_;
+    QPlainTextEdit* received_text_;
+    QPlainTextEdit* outgoing_text_;
+    QPushButton* clear_button_;
+};
+#endif
+
 std::optional<char> choose_start_mode(bool& real_mode) {
     QDialog dialog;
     dialog.setWindowTitle(QStringLiteral("Olivia QMX+ setup"));
@@ -791,15 +917,13 @@ int main(int argc, char** argv) {
         const auto selected_station = choose_start_mode(real_mode);
         if (real_mode) {
             const auto selection = choose_real_devices();
+#ifdef OLIVIA_HAS_PORTAUDIO
             if (selection.has_value()) {
-                QMessageBox::information(
-                    nullptr, QStringLiteral("Devices selected"),
-                    QStringLiteral("Serial: %1\nAudio input: %2\nAudio output: %3\n"
-                                   "Live Real-mode streaming is the next step.")
-                        .arg(selection->serial_path)
-                        .arg(selection->audio_input)
-                        .arg(selection->audio_output));
+                RealWindow window(*selection);
+                window.show();
+                return application.exec();
             }
+#endif
             return 0;
         }
         if (!selected_station.has_value()) {

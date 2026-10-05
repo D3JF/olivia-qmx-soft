@@ -109,6 +109,10 @@ if(Qt5_FOUND)
             Qt5::Network
     )
     if(TARGET olivia_audio)
+        target_sources(olivia_gui PRIVATE
+            cpp/include/real_worker.hpp
+            cpp/src/real_worker.cpp
+        )
         target_link_libraries(olivia_gui PRIVATE olivia_audio)
         target_compile_definitions(olivia_gui PRIVATE OLIVIA_HAS_PORTAUDIO=1)
     endif()

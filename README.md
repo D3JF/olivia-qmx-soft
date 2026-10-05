@@ -143,6 +143,13 @@ QMX+ initialization and transmit-state sequencing are represented by the
 separate `QmxRadio` helper. Its command writer is injectable, so command order
 and failure handling can be tested without a connected radio.
 
+When PortAudio is enabled, Real mode uses a dedicated Qt worker thread. It
+opens the selected serial port, initializes the radio, starts the selected
+mono input/output devices at the QMX+ 48 kHz USB-audio rate, downsamples
+received audio to the Olivia modem's 8 kHz rate, and upsamples transmitted
+modem audio back to 48 kHz. Hardware transmission and reception still require
+a connected QMX+ and have not been verified on physical hardware here.
+
 The graphical app also needs an X11 display. When I run it from a remote
 Ubuntu machine, I use VcXsrv on Windows and connect with SSH X11 forwarding.
 The VS Code terminal must actually have a non-empty `DISPLAY` variable.
