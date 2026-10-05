@@ -47,6 +47,20 @@ The Python application remains the behavioral reference while the port is
 developed in stages: codec, simulator transport, hardware adapters, then the
 desktop UI.
 
+When Qt5 development files are available, CMake also builds `olivia_gui`
+(`olivia_gui.exe` on Windows). It reproduces the current simulator GUI:
+station status, connection control, tone and bandwidth selectors, received and
+outgoing text areas, transmit, and clear controls. It currently uses the
+native UDP simulator; QMX+ serial and USB audio hardware support remains a
+later adapter.
+
+Run the Qt simulator with two instances:
+
+```powershell
+.\olivia_gui.exe --station A
+.\olivia_gui.exe --station B
+```
+
 ### Windows simulator executable
 
 The first runnable C++ application slice is a native console simulator. Build

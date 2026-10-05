@@ -25,6 +25,22 @@ if(WIN32)
     target_link_libraries(olivia_app PRIVATE ws2_32)
 endif()
 
+find_package(Qt5 COMPONENTS Widgets Network QUIET)
+if(Qt5_FOUND)
+    set(CMAKE_AUTOMOC ON)
+    add_executable(olivia_gui
+        cpp/src/olivia_gui.cpp
+    )
+    target_link_libraries(olivia_gui PRIVATE
+        olivia_core
+        Qt5::Widgets
+        Qt5::Network
+    )
+    if(WIN32)
+        target_link_libraries(olivia_gui PRIVATE ws2_32)
+    endif()
+endif()
+
 if(BUILD_TESTING)
     add_executable(olivia_core_tests
         cpp/tests/olivia_modem_tests.cpp
