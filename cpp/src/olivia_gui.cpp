@@ -94,11 +94,12 @@ public slots:
         emit connected(false);
     }
 
-    void transmit(const QString& message) {
+    void transmit(const QString& message, int tones, int bandwidth) {
         if (!running_ || socket_ == nullptr) {
             emit error(QStringLiteral("TX failed: simulator is not connected."));
             return;
         }
+        configure_modem(tones, bandwidth);
         const auto samples = modem_.modulate(message.toLatin1().toStdString());
         ++transaction_id_;
         const int total_packets =
@@ -123,8 +124,13 @@ public slots:
                 QThread::msleep(
                     static_cast<unsigned long>(1000.0 * count / sample_rate));
             }
+
         }
         emit status(QStringLiteral("Transmitted: %1").arg(message));
+    }
+
+    void configure(int tones, int bandwidth) {
+        configure_modem(tones, bandwidth);
     }
 
 signals:
@@ -176,6 +182,16 @@ private slots:
     }
 
 private:
+    void configure_modem(int tones, int bandwidth) {
+        if (modem_.tones() == tones && modem_.bandwidth() == bandwidth) {
+            return;
+        }
+        modem_ = olivia::OliviaModem(tones, bandwidth, sample_rate);
+        packets_.clear();
+        packet_totals_.clear();
+        next_sequences_.clear();
+    }
+
     void decode_payload(const QByteArray& payload) {
         if (payload.isEmpty() ||
             payload.size() % static_cast<int>(sizeof(float)) != 0) {
@@ -276,6 +292,12 @@ public:
                 &SimulatorWorker::start);
         connect(this, &MainWindow::stop_requested, worker_,
                 &SimulatorWorker::stop);
+        connect(this, &MainWindow::configuration_requested, worker_,
+                &SimulatorWorker::configure);
+        connect(tone_group_, &QButtonGroup::idClicked, this,
+                &MainWindow::update_configuration);
+        connect(bandwidth_group_, &QButtonGroup::idClicked, this,
+                &MainWindow::update_configuration);
         connect(worker_, &SimulatorWorker::connected, this,
                 &MainWindow::connection_changed);
         connect(worker_, &SimulatorWorker::received, this,
@@ -290,6 +312,8 @@ public:
                 });
         connect(this, &MainWindow::transmit_requested, worker_,
                 &SimulatorWorker::transmit);
+        emit configuration_requested(tone_group_->checkedId(),
+                                     bandwidth_group_->checkedId());
         thread_->start();
     }
 
@@ -306,7 +330,8 @@ public:
     }
 
 signals:
-    void transmit_requested(const QString& message);
+    void transmit_requested(const QString& message, int tones, int bandwidth);
+    void configuration_requested(int tones, int bandwidth);
     void start_requested();
     void stop_requested();
 
@@ -343,8 +368,14 @@ private:
                                                   QStringLiteral("\n"));
         outgoing_text_->clear();
         if (!message.trimmed().isEmpty()) {
-            emit transmit_requested(message);
+            emit transmit_requested(message, tone_group_->checkedId(),
+                                    bandwidth_group_->checkedId());
         }
+    }
+
+    void update_configuration() {
+        emit configuration_requested(tone_group_->checkedId(),
+                                     bandwidth_group_->checkedId());
     }
 
     void connection_changed(bool connected) {
