@@ -255,16 +255,25 @@ class OliviaQmxTests(unittest.TestCase):
         worker._rx_codec = app.OliviaCodec()
         errors = []
         worker.error.connect(errors.append)
+        with patch.object(worker._rx_codec, "decode", side_effect=ValueError("bad samples")):
+            worker._decode_audio_block([1.0])
+
+        self.assertEqual(errors, ["RX decode failed: bad samples"])
+
+    def test_audio_callback_queues_samples_for_decoder_thread(self):
+        worker = app.RadioWorker()
+        worker._rx_codec = app.OliviaCodec()
 
         class AudioBlock:
             def __getitem__(self, key):
-                self.assert_key = key
-                return [1.0]
+                assert key == (slice(None), 0)
+                return [1.0, 2.0]
 
-        with patch.object(worker._rx_codec, "decode", side_effect=ValueError("bad samples")):
-            worker._audio_callback(AudioBlock(), 1, None, None)
+        with patch.object(worker._rx_codec, "decode") as decode:
+            worker._audio_callback(AudioBlock(), 2, None, None)
 
-        self.assertEqual(errors, ["RX decode failed: bad samples"])
+        decode.assert_not_called()
+        self.assertEqual(worker._decoder_queue.get_nowait(), [1.0, 2.0])
 
     def test_worker_start_sends_frequency_and_usb_mode(self):
         worker = app.RadioWorker()
@@ -317,6 +326,7 @@ class OliviaQmxTests(unittest.TestCase):
         self.assertEqual(app.SIMULATOR_PACKET_BYTES, 8192)
         self.assertGreater(app.SIMULATOR_RECEIVE_BUFFER_BYTES, 3_000_000)
         self.assertGreater(app.SIMULATOR_PACKET_DELAY_SECONDS, 0)
+        self.assertEqual(app.SIMULATOR_AUDIO_BLOCK_SAMPLES, 1024)
 
 if __name__ == "__main__":
     unittest.main()

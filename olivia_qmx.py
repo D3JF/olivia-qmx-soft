@@ -41,6 +41,7 @@ SERIAL_COMMANDS = (b"FA00007040000;", b"MD2;")
 SIMULATOR_PACKET_BYTES = 8 * 1024
 SIMULATOR_RECEIVE_BUFFER_BYTES = 4 * 1024 * 1024
 SIMULATOR_PACKET_DELAY_SECONDS = 0.005
+SIMULATOR_AUDIO_BLOCK_SAMPLES = 1024
 
 
 def normalize_transmit_text(message: str) -> str:
@@ -139,13 +140,26 @@ class RadioWorker(QObject):
         self._simulated_socket: Optional[socket.socket] = None
         self._simulated_rx: queue.Queue[np.ndarray | None] = queue.Queue()
         self._simulated_rx_thread: Optional[threading.Thread] = None
+        # The demodulator owns mutable stream state, so all audio blocks pass
+        # through one ordered queue and one decoder thread.
+        self._decoder_queue: queue.Queue[np.ndarray | None] = queue.Queue()
+        self._decoder_thread: Optional[threading.Thread] = None
         self._simulated_tx_id = 0
+
+    def _start_decoder_thread(self) -> None:
+        self._decoder_thread = threading.Thread(
+            target=self._decoder_loop,
+            name="olivia-decoder",
+            daemon=True,
+        )
+        self._decoder_thread.start()
 
     @pyqtSlot()
     def start(self) -> None:
         try:
             self._codec = OliviaCodec()
             self._rx_codec = OliviaCodec()
+            self._start_decoder_thread()
             if self._simulator:
                 if self._station_id not in ("A", "B"):
                     self._station_id = ""
@@ -217,8 +231,27 @@ class RadioWorker(QObject):
             self.status.emit(f"Audio: {status}")
         if self._rx_codec is None or not self._running:
             return
+        # Keep FFT work out of the sounddevice callback. Blocking a real audio
+        # callback can cause dropped input blocks and make the receiver fail.
+        self._decoder_queue.put(np.asarray(data[:, 0], dtype=np.float32))
+
+    def _decoder_loop(self) -> None:
+        while True:
+            block = self._decoder_queue.get()
+            if block is None:
+                return
+            self._decode_audio_block(block)
+            if self._simulator:
+                # The simulator has all samples immediately, unlike a sound
+                # card. Pace decoding so a long message does not monopolize
+                # the CPU and starve the GUI or the other station.
+                time.sleep(len(block) / SAMPLE_RATE)
+
+    def _decode_audio_block(self, samples: np.ndarray) -> None:
+        if self._rx_codec is None:
+            return
         try:
-            text = self._rx_codec.decode(np.asarray(data[:, 0], dtype=np.float32))
+            text = self._rx_codec.decode(samples)
             if text:
                 self.received.emit(text)
         except Exception as exc:
@@ -260,8 +293,10 @@ class RadioWorker(QObject):
             del packets[tx_id]
             del packet_counts[tx_id]
             samples = np.frombuffer(payload, dtype=np.float32)
-            for start in range(0, len(samples), 1024):
-                block = samples[start : start + 1024]
+            # UDP reassembly is only transport. Feed the reconstructed audio
+            # to the same block path used by the real audio input.
+            for start in range(0, len(samples), SIMULATOR_AUDIO_BLOCK_SAMPLES):
+                block = samples[start : start + SIMULATOR_AUDIO_BLOCK_SAMPLES]
                 self._audio_callback(block.reshape(-1, 1), len(block), None, None)
 
     @pyqtSlot(str)
@@ -276,6 +311,9 @@ class RadioWorker(QObject):
                     self.status.emit("Simulator transmitting...")
                     samples = self._codec.encode(message)
                     if self._station_id:
+                        # The UDP header is simulator-only. It preserves packet
+                        # order and message boundaries without changing the
+                        # Olivia waveform sent to the decoder.
                         target_port = target_station_port(
                             self._station_id, self._channel_port
                         )
@@ -340,6 +378,9 @@ class RadioWorker(QObject):
                 self._simulated_rx.put(None)
             if self._simulated_rx_thread is not None:
                 self._simulated_rx_thread.join(timeout=3)
+        self._decoder_queue.put(None)
+        if self._decoder_thread is not None:
+            self._decoder_thread.join(timeout=3)
         self._running = False
         if self._audio is not None:
             self._audio.stop()

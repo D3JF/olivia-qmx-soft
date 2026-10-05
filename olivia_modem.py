@@ -74,6 +74,8 @@ class OliviaModem:
     def modulate(self, text: str) -> np.ndarray:
         """Return waveform samples for text, including complete Olivia blocks."""
         encoded = text.encode("latin-1", errors="replace")
+        # Olivia carries three bytes through each 64-symbol block in this
+        # 8-tone configuration. Padding keeps every block decoder-aligned.
         pieces = [
             encoded[index : index + self._bits_per_symbol].ljust(
                 self._bits_per_symbol, b"\0"
@@ -88,6 +90,8 @@ class OliviaModem:
 
     def demodulate(self, samples: np.ndarray) -> str:
         """Consume audio samples and return any completely decoded text."""
+        # Audio callbacks do not necessarily end on an Olivia block boundary,
+        # so retain incomplete samples until the next callback.
         self._samples = np.concatenate(
             (self._samples, np.asarray(samples, dtype=np.float32).reshape(-1))
         )
@@ -101,6 +105,8 @@ class OliviaModem:
 
     def _modulate_piece(self, piece: bytes) -> np.ndarray:
         symbols = self._prepare_symbols(piece)
+        # The extra sample-sized slot prevents the final shaped tone from
+        # being truncated before the waveform is trimmed to 64 symbols.
         waveform = np.zeros(65 * self._symbol_samples, dtype=np.float64)
         for index, symbol in enumerate(symbols):
             frequency = (
@@ -152,6 +158,9 @@ class OliviaModem:
                 index * self._symbol_samples : (index + 1) * self._symbol_samples
             ]
             spectrum = np.abs(np.fft.fft(chunk))
+            # These bins must match the tone frequencies used by the
+            # modulator. An offset here can pass short loopback tests while
+            # corrupting characters in longer transmissions.
             start_frequency = (
                 self.center_frequency
                 - self.bandwidth / 2
