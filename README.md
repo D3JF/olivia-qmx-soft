@@ -127,11 +127,34 @@ matching USB audio device.
 From the project directory:
 
 ```bash
-.venv/bin/python -m unittest -v test_olivia_qmx.py test_olivia_modem.py
+.venv/bin/python -m unittest -v test_olivia_qmx.py test_olivia_modem.py test_olivia_waveform.py
 ```
 
 The tests do not need a radio. The application tests use small dependency
 doubles for the hardware-facing parts.
+
+## Render a waveform image
+
+The waveform tool uses the same Olivia 8/250 codec as the application. It
+writes a JPEG containing the waveform and a spectrogram.
+
+Give the message as an argument:
+
+```bash
+QT_QPA_PLATFORM=offscreen .venv/bin/python olivia_waveform.py \
+  "Hello, World!" -o hello-world.jpg
+```
+
+Or pipe the message through standard input:
+
+```bash
+printf '%s\n' "Hello, World!" | \
+  QT_QPA_PLATFORM=offscreen .venv/bin/python olivia_waveform.py \
+  -o hello-world.jpg
+```
+
+The default output filename is `olivia_waveform.jpg`. JPEG files are ignored
+by Git because these images are intended for local testing.
 
 ## VS Code tasks
 
@@ -155,6 +178,8 @@ the forwarding tunnel.
 - `olivia_modem.py` is the local Olivia codec.
 - `test_olivia_qmx.py` tests the application and hardware boundaries.
 - `test_olivia_modem.py` tests real codec round trips.
+- `olivia_waveform.py` renders codec output as a JPEG waveform image.
+- `test_olivia_waveform.py` tests the image generator command line.
 - `.vscode/tasks.json` contains the VS Code tasks.
 
 This is an initial test version. I am keeping it small while I work out what
