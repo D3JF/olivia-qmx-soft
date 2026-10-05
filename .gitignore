@@ -10,3 +10,6 @@ olivia-python/
 .vscode/*.log
 .DS_Store
 Thumbs.db
+
+# Locally generated images.
+*.jpg
