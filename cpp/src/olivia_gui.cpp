@@ -4,11 +4,14 @@
 #include <QButtonGroup>
 #include <QCommandLineParser>
 #include <QDataStream>
+#include <QDialog>
+#include <QDialogButtonBox>
 #include <QFormLayout>
 #include <QGroupBox>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QMainWindow>
+#include <QMessageBox>
 #include <QPlainTextEdit>
 #include <QPushButton>
 #include <QRadioButton>
@@ -23,6 +26,7 @@
 #include <cstdint>
 #include <cstring>
 #include <memory>
+#include <optional>
 
 namespace {
 
@@ -325,6 +329,54 @@ private:
     QButtonGroup* bandwidth_group_ = nullptr;
 };
 
+std::optional<char> choose_start_mode(bool& real_mode) {
+    QDialog dialog;
+    dialog.setWindowTitle(QStringLiteral("Olivia QMX+ setup"));
+    dialog.setMinimumWidth(360);
+
+    auto* layout = new QVBoxLayout(&dialog);
+    layout->addWidget(new QLabel(
+        QStringLiteral("Choose how you want to use Olivia:")));
+
+    auto* mode_group = new QGroupBox(QStringLiteral("Mode"));
+    auto* mode_layout = new QVBoxLayout(mode_group);
+    auto* test_mode = new QRadioButton(QStringLiteral("Test mode (simulator)"));
+    auto* real_mode_button =
+        new QRadioButton(QStringLiteral("Real mode (QMX+ radio)"));
+    test_mode->setChecked(true);
+    mode_layout->addWidget(test_mode);
+    mode_layout->addWidget(real_mode_button);
+    layout->addWidget(mode_group);
+
+    auto* station_group = new QGroupBox(QStringLiteral("Test station"));
+    auto* station_layout = new QHBoxLayout(station_group);
+    auto* station_a = new QRadioButton(QStringLiteral("Station A"));
+    auto* station_b = new QRadioButton(QStringLiteral("Station B"));
+    station_a->setChecked(true);
+    station_layout->addWidget(station_a);
+    station_layout->addWidget(station_b);
+    layout->addWidget(station_group);
+
+    auto* buttons = new QDialogButtonBox(
+        QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
+    layout->addWidget(buttons);
+    QObject::connect(buttons, &QDialogButtonBox::accepted, &dialog,
+                     &QDialog::accept);
+    QObject::connect(buttons, &QDialogButtonBox::rejected, &dialog,
+                     &QDialog::reject);
+    QObject::connect(real_mode_button, &QRadioButton::toggled, station_group,
+                     &QWidget::setDisabled);
+
+    if (dialog.exec() != QDialog::Accepted) {
+        return std::nullopt;
+    }
+    if (real_mode_button->isChecked()) {
+        real_mode = true;
+        return std::nullopt;
+    }
+    return station_b->isChecked() ? 'B' : 'A';
+}
+
 }  // namespace
 
 #include "olivia_gui.moc"
@@ -337,24 +389,42 @@ int main(int argc, char** argv) {
     parser.addHelpOption();
     QCommandLineOption station_option(
         {"s", "station"}, "Simulator station (A or B; default A).", "station",
-        QStringLiteral("A"));
+        QString());
     QCommandLineOption port_option(
         {"p", "channel-port"}, "Shared simulator channel port.", "port",
         QString::number(default_port));
     parser.addOption(station_option);
     parser.addOption(port_option);
     parser.process(application);
-    const auto station_value = parser.value(station_option).toUpper();
-    if (station_value != QStringLiteral("A") &&
-        station_value != QStringLiteral("B")) {
-        parser.showHelp(1);
-    }
     bool port_ok = false;
     const int port = parser.value(port_option).toInt(&port_ok);
     if (!port_ok || port < 1 || port > 65532) {
         parser.showHelp(1);
     }
-    MainWindow window(station_value.at(0).toLatin1(), port);
+    char station = '\0';
+    const auto station_value = parser.value(station_option).toUpper();
+    if (!station_value.isEmpty()) {
+        if (station_value != QStringLiteral("A") &&
+            station_value != QStringLiteral("B")) {
+            parser.showHelp(1);
+        }
+        station = station_value.at(0).toLatin1();
+    } else {
+        bool real_mode = false;
+        const auto selected_station = choose_start_mode(real_mode);
+        if (real_mode) {
+            QMessageBox::information(
+                nullptr, QStringLiteral("Real mode"),
+                QStringLiteral(
+                    "Real QMX+ mode is not implemented in the C++ version yet."));
+            return 0;
+        }
+        if (!selected_station.has_value()) {
+            return 0;
+        }
+        station = selected_station.value();
+    }
+    MainWindow window(station, port);
     window.show();
     return application.exec();
 }

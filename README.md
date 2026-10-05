@@ -61,8 +61,10 @@ Run the Qt simulator with two instances:
 .\olivia_gui.exe --station B
 ```
 
-Launching `olivia_gui.exe` from Explorer starts Station A by default. Use
-`--station B` for the second instance.
+Launching `olivia_gui.exe` from Explorer opens a setup dialog. Choose Test
+mode, then Station A or Station B. The command-line options remain available
+for automation; `--station B` skips the dialog. Real QMX+ mode currently
+explains that the hardware backend is not implemented in the C++ version yet.
 
 ### Windows simulator executable
 
