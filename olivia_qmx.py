@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Minimal Olivia 8/250 terminal for a QRP Labs QMX+.
+"""Minimal configurable Olivia terminal for a QRP Labs QMX+.
 
 Install the runtime dependencies with:
     python3 -m pip install PyQt5 pyserial sounddevice numpy
@@ -25,9 +25,13 @@ from PyQt5.QtCore import QTimer, QObject, QThread, QRect, pyqtSignal, pyqtSlot
 from PyQt5.QtGui import QColor, QImage, QPainter
 from PyQt5.QtWidgets import (
     QApplication,
+    QButtonGroup,
+    QGroupBox,
+    QHBoxLayout,
     QMainWindow,
     QLabel,
     QPushButton,
+    QRadioButton,
     QTextEdit,
     QVBoxLayout,
     QWidget,
@@ -37,6 +41,10 @@ from olivia_modem import OliviaModem
 
 
 SAMPLE_RATE = 8000
+TONE_OPTIONS = (2, 4, 8, 16, 32, 64, 128, 256)
+BANDWIDTH_OPTIONS = (125, 250, 500, 1000, 2000)
+DEFAULT_TONES = 8
+DEFAULT_BANDWIDTH = 250
 CHANNELS = 1
 BAUD_RATE = 115200
 SERIAL_COMMANDS = (b"FA00007040000;", b"MD2;")
@@ -44,8 +52,7 @@ SIMULATOR_PACKET_BYTES = 8 * 1024
 SIMULATOR_RECEIVE_BUFFER_BYTES = 4 * 1024 * 1024
 SIMULATOR_PACKET_DELAY_SECONDS = 0.005
 SIMULATOR_AUDIO_BLOCK_SAMPLES = 1024
-WATERFALL_MIN_FREQUENCY = 1300
-WATERFALL_MAX_FREQUENCY = 1700
+CENTER_FREQUENCY = 1500
 WATERFALL_FFT_SIZE = 1024
 WATERFALL_HOP_SIZE = 128
 WATERFALL_MIN_DB = -35.0
@@ -137,6 +144,7 @@ class WaterfallWidget(QWidget):
         self._transmission_active = False
         self._transmission_finishing = False
         self._next_column = 0
+        self._bandwidth = DEFAULT_BANDWIDTH
         self._paint_timer = QTimer(self)
         self._paint_timer.setInterval(33)
         self._paint_timer.timeout.connect(self._paint_pending_rows)
@@ -168,6 +176,13 @@ class WaterfallWidget(QWidget):
         self._transmission_finishing = False
         self._next_column = 0
         self._paint_timer.start()
+        self.update()
+
+    @pyqtSlot(int)
+    def set_bandwidth(self, bandwidth: int) -> None:
+        if bandwidth not in BANDWIDTH_OPTIONS:
+            raise ValueError("Unsupported waterfall bandwidth.")
+        self._bandwidth = bandwidth
         self.update()
 
     @pyqtSlot(object)
@@ -227,11 +242,12 @@ class WaterfallWidget(QWidget):
         painter = QPainter(self)
         painter.drawImage(0, 0, self._image)
         painter.setPen(QColor("#d0d7de"))
+        minimum = CENTER_FREQUENCY - self._bandwidth / 2
+        maximum = CENTER_FREQUENCY + self._bandwidth / 2
         painter.drawText(
             8,
             18,
-            f"TX waterfall: {WATERFALL_MIN_FREQUENCY}-"
-            f"{WATERFALL_MAX_FREQUENCY} Hz",
+            f"TX waterfall: {minimum:g}-{maximum:g} Hz",
         )
         painter.end()
 
@@ -239,13 +255,15 @@ class WaterfallWidget(QWidget):
 class OliviaCodec:
     """Adapt the common olivia-modem APIs to the app's audio interface."""
 
-    def __init__(self) -> None:
+    def __init__(
+        self, tones: int = DEFAULT_TONES, bandwidth: int = DEFAULT_BANDWIDTH
+    ) -> None:
         try:
             self._modem = OliviaModem(
-                tones=8, bandwidth=250, sample_rate=SAMPLE_RATE
+                tones=tones, bandwidth=bandwidth, sample_rate=SAMPLE_RATE
             )
         except TypeError:
-            self._modem = OliviaModem(8, 250, SAMPLE_RATE)
+            self._modem = OliviaModem(tones, bandwidth, SAMPLE_RATE)
 
     def encode(self, text: str) -> np.ndarray:
         for name in ("modulate", "encode", "tx"):
@@ -298,9 +316,19 @@ class RadioWorker(QObject):
         self._decoder_thread: Optional[threading.Thread] = None
         self._simulated_tx_id = 0
         self._connected = False
-        self._waterfall_buffer: Optional[np.ndarray] = None
-        self._waterfall_window: Optional[np.ndarray] = None
-        self._waterfall_frequency_mask: Optional[np.ndarray] = None
+        self._transmitting = False
+        self._tones = DEFAULT_TONES
+        self._bandwidth = DEFAULT_BANDWIDTH
+        self._codec_lock = threading.Lock()
+        self._waterfall_queue: queue.Queue[
+            tuple[str, np.ndarray | int | None]
+        ] = queue.Queue()
+        self._waterfall_thread = threading.Thread(
+            target=self._waterfall_loop,
+            name="olivia-waterfall",
+            daemon=True,
+        )
+        self._waterfall_thread.start()
 
     def _start_decoder_thread(self) -> None:
         self._decoder_thread = threading.Thread(
@@ -311,45 +339,83 @@ class RadioWorker(QObject):
         self._decoder_thread.start()
 
     def _reset_waterfall(self) -> None:
-        if not hasattr(np, "fft"):
-            return
-        self._waterfall_buffer = np.empty(0, dtype=np.float32)
-        self._waterfall_window = np.hanning(WATERFALL_FFT_SIZE)
-        frequencies = np.fft.rfftfreq(WATERFALL_FFT_SIZE, 1 / SAMPLE_RATE)
-        self._waterfall_frequency_mask = (
-            (frequencies >= WATERFALL_MIN_FREQUENCY)
-            & (frequencies <= WATERFALL_MAX_FREQUENCY)
-        )
+        self._waterfall_queue.put(("reset", self._bandwidth))
+        self._waterfall_queue.join()
 
     def _publish_transmission_block(self, block: np.ndarray) -> None:
         self.transmission_samples.emit(block)
-        if self._waterfall_buffer is None:
-            return
-        self._waterfall_buffer = np.concatenate((self._waterfall_buffer, block))
-        assert self._waterfall_window is not None
-        assert self._waterfall_frequency_mask is not None
-        while self._waterfall_buffer.size >= WATERFALL_FFT_SIZE:
-            spectrum = np.abs(
-                np.fft.rfft(
-                    self._waterfall_buffer[:WATERFALL_FFT_SIZE]
-                    * self._waterfall_window
-                )
-            )
-            level = 20 * np.log10(np.maximum(spectrum, 1e-12))
-            selected = level[self._waterfall_frequency_mask]
-            relative_level = selected - float(selected.max())
-            row = np.clip(
-                (relative_level - WATERFALL_MIN_DB)
-                / (WATERFALL_MAX_DB - WATERFALL_MIN_DB),
-                0,
-                1,
-            ).astype(np.float32)
-            self.transmission_spectrum.emit(row)
-            self._waterfall_buffer = self._waterfall_buffer[WATERFALL_HOP_SIZE:]
+        self._waterfall_queue.put(
+            ("samples", np.asarray(block, dtype=np.float32).copy())
+        )
+
+    def _waterfall_loop(self) -> None:
+        buffer: Optional[np.ndarray] = None
+        window: Optional[np.ndarray] = None
+        frequency_mask: Optional[np.ndarray] = None
+        while True:
+            operation, value = self._waterfall_queue.get()
+            try:
+                if operation == "stop":
+                    return
+                if operation == "reset":
+                    assert isinstance(value, int)
+                    if not hasattr(np, "fft") or not hasattr(np, "empty"):
+                        continue
+                    buffer = np.empty(0, dtype=np.float32)
+                    window = np.hanning(WATERFALL_FFT_SIZE)
+                    frequencies = np.fft.rfftfreq(
+                        WATERFALL_FFT_SIZE, 1 / SAMPLE_RATE
+                    )
+                    frequency_mask = (
+                        frequencies
+                        >= CENTER_FREQUENCY - value / 2
+                    ) & (
+                        frequencies
+                        <= CENTER_FREQUENCY + value / 2
+                    )
+                    continue
+                if operation != "samples" or value is None:
+                    continue
+                if window is None or frequency_mask is None:
+                    continue
+                assert buffer is not None
+                buffer = np.concatenate((buffer, value))
+                while buffer.size >= WATERFALL_FFT_SIZE:
+                    spectrum = np.abs(
+                        np.fft.rfft(buffer[:WATERFALL_FFT_SIZE] * window)
+                    )
+                    level = 20 * np.log10(np.maximum(spectrum, 1e-12))
+                    selected = level[frequency_mask]
+                    relative_level = selected - float(selected.max())
+                    row = np.clip(
+                        (relative_level - WATERFALL_MIN_DB)
+                        / (WATERFALL_MAX_DB - WATERFALL_MIN_DB),
+                        0,
+                        1,
+                    ).astype(np.float32)
+                    self.transmission_spectrum.emit(row)
+                    buffer = buffer[WATERFALL_HOP_SIZE:]
+            finally:
+                self._waterfall_queue.task_done()
 
     @pyqtSlot()
     def start(self) -> None:
         self.connect_radio()
+
+    @pyqtSlot(int, int)
+    def set_configuration(self, tones: int, bandwidth: int) -> None:
+        if tones not in TONE_OPTIONS or bandwidth not in BANDWIDTH_OPTIONS:
+            raise ValueError("Unsupported Olivia configuration.")
+        if self._transmitting:
+            self.status.emit("Finish transmitting before changing Olivia mode")
+            return
+        with self._codec_lock:
+            self._tones = tones
+            self._bandwidth = bandwidth
+            if self._connected:
+                self._codec = OliviaCodec(tones, bandwidth)
+                self._rx_codec = OliviaCodec(tones, bandwidth)
+        self.status.emit(f"Olivia {tones}/{bandwidth} configured")
 
     @pyqtSlot()
     def connect_radio(self) -> None:
@@ -357,8 +423,8 @@ class RadioWorker(QObject):
             return
         self._running = True
         try:
-            self._codec = OliviaCodec()
-            self._rx_codec = OliviaCodec()
+            self._codec = OliviaCodec(self._tones, self._bandwidth)
+            self._rx_codec = OliviaCodec(self._tones, self._bandwidth)
             if self._decoder_thread is None or not self._decoder_thread.is_alive():
                 self._start_decoder_thread()
             if self._simulator:
@@ -423,7 +489,9 @@ class RadioWorker(QObject):
             )
             self._audio.start()
             self._connected = True
-            self.status.emit(f"Connected to {port}; Olivia 8/250 RX active")
+            self.status.emit(
+                f"Connected to {port}; Olivia {self._tones}/{self._bandwidth} RX active"
+            )
             self.connected.emit(True)
             self.ready.emit()
         except Exception as exc:
@@ -490,10 +558,11 @@ class RadioWorker(QObject):
                 time.sleep(len(block) / SAMPLE_RATE)
 
     def _decode_audio_block(self, samples: np.ndarray) -> None:
-        if self._rx_codec is None:
-            return
         try:
-            text = self._rx_codec.decode(samples)
+            with self._codec_lock:
+                if self._rx_codec is None:
+                    return
+                text = self._rx_codec.decode(samples)
             if text:
                 self.received.emit(text)
         except Exception as exc:
@@ -543,6 +612,7 @@ class RadioWorker(QObject):
                 if not self._connected or self._codec is None:
                     raise RuntimeError("QMX+ is not connected.")
                 self.transmitting.emit(True)
+                self._transmitting = True
                 self.transmission_started.emit()
                 self._reset_waterfall()
                 if self._simulator:
@@ -624,6 +694,8 @@ class RadioWorker(QObject):
                     self.connected.emit(False)
                 self.error.emit(f"TX failed: {exc}")
             finally:
+                self._waterfall_queue.join()
+                self._transmitting = False
                 if self._serial is not None and self._serial.is_open:
                     try:
                         self._serial.write(b"RX;")
@@ -642,12 +714,16 @@ class RadioWorker(QObject):
             self._simulated_rx.put(None)
         self._close_connection()
         self._decoder_queue.put(None)
+        self._waterfall_queue.join()
+        self._waterfall_queue.put(("stop", None))
+        self._waterfall_thread.join(timeout=3)
         if self._decoder_thread is not None:
             self._decoder_thread.join(timeout=3)
 
 
 class MainWindow(QMainWindow):
     transmit_requested = pyqtSignal(str)
+    configuration_requested = pyqtSignal(int, int)
     shutdown_requested = pyqtSignal()
     connect_requested = pyqtSignal()
     disconnect_requested = pyqtSignal()
@@ -669,6 +745,17 @@ class MainWindow(QMainWindow):
         self.connection_button = QPushButton("Reconnect")
         self.transmit_button = QPushButton("TRANSMIT")
         self.clear_button = QPushButton("Clear received")
+        self.tone_group = QButtonGroup(self)
+        self.bandwidth_group = QButtonGroup(self)
+        self.tone_buttons = self._create_radio_group(
+            "Tones", TONE_OPTIONS, self.tone_group, DEFAULT_TONES
+        )
+        self.bandwidth_buttons = self._create_radio_group(
+            "Bandwidth (Hz)",
+            BANDWIDTH_OPTIONS,
+            self.bandwidth_group,
+            DEFAULT_BANDWIDTH,
+        )
         self.connection_button.setMinimumHeight(40)
         self.transmit_button.setMinimumHeight(64)
         self.connection_button.clicked.connect(self._toggle_connection)
@@ -678,6 +765,8 @@ class MainWindow(QMainWindow):
         layout = QVBoxLayout()
         layout.addWidget(self.station_label)
         layout.addWidget(self.connection_button)
+        layout.addWidget(self.tone_buttons)
+        layout.addWidget(self.bandwidth_buttons)
         layout.addWidget(self.waterfall)
         layout.addWidget(self.received_text, 3)
         layout.addWidget(self.outgoing_text, 1)
@@ -693,6 +782,7 @@ class MainWindow(QMainWindow):
         self.worker.moveToThread(self.thread)
         self.thread.started.connect(self.worker.start)
         self.transmit_requested.connect(self.worker.transmit)
+        self.configuration_requested.connect(self.worker.set_configuration)
         self.connect_requested.connect(self.worker.connect_radio)
         self.disconnect_requested.connect(self.worker.disconnect_radio)
         self.shutdown_requested.connect(self.worker.stop)
@@ -708,6 +798,33 @@ class MainWindow(QMainWindow):
         self.connection_button.setEnabled(False)
         self.transmit_button.setEnabled(False)
         self.thread.start()
+
+    def _create_radio_group(
+        self,
+        title: str,
+        options: tuple[int, ...],
+        group: QButtonGroup,
+        default: int,
+    ) -> QGroupBox:
+        box = QGroupBox(title)
+        buttons_layout = QHBoxLayout(box)
+        for value in options:
+            label = f"{value} Hz" if group is self.bandwidth_group else str(value)
+            button = QRadioButton(label)
+            button.setProperty("configuration_value", value)
+            group.addButton(button, value)
+            buttons_layout.addWidget(button)
+            if value == default:
+                button.setChecked(True)
+        group.buttonClicked[int].connect(self._configuration_changed)
+        return box
+
+    def _configuration_changed(self, _value: int) -> None:
+        tones = self.tone_group.checkedId()
+        bandwidth = self.bandwidth_group.checkedId()
+        if tones > 0 and bandwidth > 0:
+            self.waterfall.set_bandwidth(bandwidth)
+            self.configuration_requested.emit(tones, bandwidth)
 
     def _transmit(self) -> None:
         message = normalize_transmit_text(self.outgoing_text.toPlainText())
@@ -730,6 +847,8 @@ class MainWindow(QMainWindow):
         self.transmit_button.setEnabled(connected)
 
     def _transmitting_changed(self, transmitting: bool) -> None:
+        for button in self.tone_group.buttons() + self.bandwidth_group.buttons():
+            button.setEnabled(not transmitting)
         if transmitting:
             self.transmit_button.setEnabled(False)
         else:

@@ -32,7 +32,16 @@ class OliviaModemTests(unittest.TestCase):
 
     def test_rejects_unsupported_configuration(self):
         with self.assertRaises(ValueError):
-            OliviaModem(16, 500, 8000)
+            OliviaModem(3, 250, 8000)
+        with self.assertRaises(ValueError):
+            OliviaModem(8, 300, 8000)
+
+    def test_supports_requested_configurations(self):
+        for tones in (2, 4, 8, 16, 32, 64, 128, 256):
+            for bandwidth in (125, 250, 500, 1000, 2000):
+                modem = OliviaModem(tones, bandwidth, 8000)
+                self.assertEqual(modem.tones, tones)
+                self.assertEqual(modem.bandwidth, bandwidth)
 
     def test_empty_message_produces_finite_samples(self):
         samples = OliviaModem().modulate("")
@@ -42,6 +51,12 @@ class OliviaModemTests(unittest.TestCase):
 
     def test_round_trip_short_message(self):
         self.assertEqual(self.round_trip("Hello"), "Hello")
+
+    def test_round_trip_with_other_tone_count_and_bandwidth(self):
+        encoder = OliviaModem(16, 500)
+        decoder = OliviaModem(16, 500)
+        samples = encoder.modulate("Hello")
+        self.assertEqual(decoder.demodulate(samples), "Hello")
 
     def test_round_trip_punctuation_and_spaces(self):
         message = "Hello, station A! CQ CQ 73?"

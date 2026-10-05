@@ -260,6 +260,21 @@ class OliviaQmxTests(unittest.TestCase):
         self.assertEqual(codec.encode("hello"), [5.0, 2.0])
         self.assertEqual(codec.decode([1.0]), "decoded")
 
+    def test_codec_configures_selected_olivia_mode(self):
+        codec = app.OliviaCodec(32, 1000)
+        self.assertEqual(codec._modem.configuration, (32, 1000, app.SAMPLE_RATE))
+
+    def test_worker_accepts_selected_olivia_mode(self):
+        worker = app.RadioWorker()
+        worker.set_configuration(16, 500)
+        self.assertEqual((worker._tones, worker._bandwidth), (16, 500))
+
+    def test_worker_rejects_mode_changes_during_transmission(self):
+        worker = app.RadioWorker()
+        worker._transmitting = True
+        worker.set_configuration(16, 500)
+        self.assertEqual((worker._tones, worker._bandwidth), (8, 250))
+
     def test_transmit_without_connection_reports_error(self):
         worker = app.RadioWorker()
         errors = []

@@ -1,6 +1,6 @@
 # Olivia QMX+
 
-This is a small Olivia MFSK 8/250 terminal for a QRP Labs QMX+.
+This is a small configurable Olivia MFSK terminal for a QRP Labs QMX+.
 
 I started this because I wanted to try the software without having to solve
 everything at once. The app can run against a real QMX+, or it can run in a
@@ -15,15 +15,17 @@ radio.
 
 ## What it does
 
-- Olivia 8/250 modulation and demodulation
+- Olivia modulation and demodulation with selectable tone counts (2-256) and
+  bandwidths (125-2000 Hz)
 - QMX+ serial setup
 - QMX+ USB audio input and output
 - A local simulator for two stations
 - A simple PyQt5 interface
 - Unit tests for the codec and application boundaries
 
-The local codec currently supports Olivia 8/250 only. The sample rate is
-8000 Hz and the center frequency is 1500 Hz.
+The app defaults to Olivia 8/250, a common choice for CQ. The tone count and
+bandwidth can be changed with the radio buttons before or during a connection.
+The sample rate is 8000 Hz and the center frequency is 1500 Hz.
 
 ## Requirements
 
@@ -118,11 +120,13 @@ message, type `\n`. The app converts that two-character sequence into a real
 line break before sending it.
 
 The app displays a transmit waterfall below the connection controls. It shows
-the Olivia signal energy across the 1300-1700 Hz passband while the
-transmission is running. It uses a 1024-point FFT with a 128-sample hop for
-readable frequency detail and smooth scrolling. FFT work runs in the radio
-worker; the GUI only receives finished rows and paints them on a 30 FPS timer,
-so long transmissions do not block typing or controls. The waterfall stops
+the Olivia signal energy across the selected mode's passband, centered at
+1500 Hz, while the transmission is running. It uses a 1024-point FFT with a
+128-sample hop for readable frequency detail and smooth scrolling. FFT work
+runs in a dedicated waterfall worker; the radio worker only queues audio for
+analysis and handles radio I/O. The GUI receives finished rows and paints them
+on a 30 FPS timer, so waterfall processing does not block transmission. The
+mode radio buttons are locked while transmitting, and the waterfall stops
 after the final queued row from the transmission has been painted.
 
 The live display uses a left-to-right time axis: frequency runs vertically and

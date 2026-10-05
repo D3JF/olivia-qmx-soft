@@ -1,4 +1,4 @@
-"""Small Olivia MFSK 8/250 codec used by the QMX+ application."""
+"""Small configurable Olivia MFSK codec used by the QMX+ application."""
 
 from __future__ import annotations
 
@@ -60,13 +60,15 @@ class OliviaModem:
     """Encode and incrementally decode Olivia MFSK frames."""
 
     def __init__(self, tones: int = 8, bandwidth: int = 250, sample_rate: int = 8000):
-        if tones != 8 or bandwidth != 250:
-            raise ValueError("This codec supports Olivia 8/250 only.")
+        if tones not in (2, 4, 8, 16, 32, 64, 128, 256):
+            raise ValueError("Unsupported Olivia tone count.")
+        if bandwidth not in (125, 250, 500, 1000, 2000):
+            raise ValueError("Unsupported Olivia bandwidth.")
         self.tones = tones
         self.bandwidth = bandwidth
         self.sample_rate = sample_rate
         self.center_frequency = 1500
-        self._bits_per_symbol = 3
+        self._bits_per_symbol = tones.bit_length() - 1
         self._tone_spacing = bandwidth / tones
         self._symbol_samples = int(np.ceil(sample_rate / self._tone_spacing))
         self._samples = np.empty(0, dtype=np.float32)
