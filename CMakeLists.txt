@@ -31,7 +31,10 @@ if(Qt5_FOUND)
     add_executable(olivia_gui
         cpp/src/olivia_gui.cpp
     )
-    target_link_libraries(olivia_gui PRIVATE
+        if(WIN32)
+            set_target_properties(olivia_gui PROPERTIES WIN32_EXECUTABLE TRUE)
+        endif()
+        target_link_libraries(olivia_gui PRIVATE
         olivia_core
         Qt5::Widgets
         Qt5::Network

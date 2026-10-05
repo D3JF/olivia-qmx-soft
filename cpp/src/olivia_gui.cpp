@@ -254,8 +254,12 @@ public:
     }
 
     ~MainWindow() override {
-        QMetaObject::invokeMethod(worker_, "stop",
-                                  Qt::BlockingQueuedConnection);
+        if (QThread::currentThread() == worker_->thread()) {
+            worker_->stop();
+        } else if (thread_->isRunning()) {
+            QMetaObject::invokeMethod(worker_, "stop",
+                                      Qt::BlockingQueuedConnection);
+        }
         thread_->quit();
         thread_->wait();
         delete worker_;
