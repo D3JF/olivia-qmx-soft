@@ -12,6 +12,7 @@
 #include <QLabel>
 #include <QMainWindow>
 #include <QMessageBox>
+#include <QPainter>
 #include <QPlainTextEdit>
 #include <QPushButton>
 #include <QRadioButton>
@@ -23,6 +24,8 @@
 #include <QWidget>
 
 #include <algorithm>
+#include <cmath>
+#include <complex>
 #include <cstdint>
 #include <cstring>
 #include <memory>
@@ -36,10 +39,101 @@ constexpr int sample_rate = 8000;
 constexpr int default_port = 45800;
 constexpr int packet_samples = 2048;
 constexpr int receive_buffer_bytes = 4 * 1024 * 1024;
+constexpr int spectrum_size = 1024;
+constexpr double pi = 3.14159265358979323846;
 
 struct Configuration {
     int tones = 8;
     int bandwidth = 250;
+};
+
+class SpectrumWidget final : public QWidget {
+public:
+    explicit SpectrumWidget(QWidget* parent = nullptr) : QWidget(parent) {
+        setMinimumHeight(140);
+        setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
+    }
+
+    void set_samples(const QVector<float>& samples) {
+        const int copy_count =
+            std::min(spectrum_size, static_cast<int>(samples.size()));
+        samples_.fill(0.0F, spectrum_size);
+        std::copy(samples.end() - copy_count, samples.end(),
+                  samples_.begin() + (spectrum_size - copy_count));
+        update();
+    }
+
+    void set_mode(int bandwidth) {
+        bandwidth_ = bandwidth;
+        update();
+    }
+
+protected:
+    void paintEvent(QPaintEvent*) override {
+        QPainter painter(this);
+        painter.fillRect(rect(), QColor(QStringLiteral("#101820")));
+        painter.setRenderHint(QPainter::Antialiasing);
+
+        const QRect plot = rect().adjusted(36, 10, -12, -24);
+        painter.setPen(QColor(QStringLiteral("#52606d")));
+        painter.drawRect(plot);
+        if (plot.width() < 2 || plot.height() < 2) {
+            return;
+        }
+
+        std::vector<std::complex<double>> spectrum(spectrum_size);
+        for (int index = 0; index < spectrum_size; ++index) {
+            const double window =
+                0.5 - 0.5 * std::cos(2.0 * pi * index / spectrum_size);
+            spectrum[index] = samples_[index] * window;
+        }
+        for (int length = 2; length <= spectrum_size; length *= 2) {
+            for (int start = 0; start < spectrum_size; start += length) {
+                for (int index = 0; index < length / 2; ++index) {
+                    const double angle =
+                        -2.0 * pi * index / static_cast<double>(length);
+                    const auto factor = std::polar(1.0, angle);
+                    const auto even = spectrum[start + index];
+                    const auto odd = spectrum[start + index + length / 2] *
+                                     factor;
+                    spectrum[start + index] = even + odd;
+                    spectrum[start + index + length / 2] = even - odd;
+                }
+            }
+        }
+
+        QPolygonF curve;
+        curve.reserve(spectrum_size / 2);
+        for (int index = 1; index < spectrum_size / 2; ++index) {
+            const double magnitude =
+                std::abs(spectrum[index]) / spectrum_size;
+            const double level =
+                std::clamp((20.0 * std::log10(magnitude + 1.0e-6) + 80.0) /
+                               80.0,
+                           0.0, 1.0);
+            const double frequency =
+                static_cast<double>(index) * sample_rate / spectrum_size;
+            const double x =
+                plot.left() + (frequency / sample_rate) * plot.width();
+            const double y = plot.bottom() - level * plot.height();
+            curve.append(QPointF(x, y));
+        }
+        painter.setPen(QPen(QColor(QStringLiteral("#43d17a")), 1.5));
+        painter.drawPolyline(curve);
+
+        painter.setPen(QColor(QStringLiteral("#d0d7de")));
+        painter.drawText(6, 20, QStringLiteral("Spectrum"));
+        painter.drawText(plot.left(), height() - 6,
+                         QStringLiteral("0 Hz"));
+        painter.drawText(plot.right() - 70, height() - 6,
+                         QStringLiteral("%1 kHz").arg(sample_rate / 1000));
+        painter.drawText(plot.center().x() - 42, height() - 6,
+                         QStringLiteral("BW %1 Hz").arg(bandwidth_));
+    }
+
+private:
+    QVector<float> samples_ = QVector<float>(spectrum_size, 0.0F);
+    int bandwidth_ = 250;
 };
 
 class SimulatorWorker final : public QObject {
@@ -119,6 +213,10 @@ public slots:
                    << static_cast<quint16>(total_packets);
             packet.append(reinterpret_cast<const char*>(samples.data() + start),
                           count * static_cast<int>(sizeof(float)));
+            QVector<float> audio_chunk(count);
+            std::copy(samples.begin() + start, samples.begin() + start + count,
+                      audio_chunk.begin());
+            emit audio_samples(audio_chunk);
             socket_->writeDatagram(packet, QHostAddress::LocalHost,
                                    target_port());
             if (sequence + 1 < total_packets) {
@@ -137,6 +235,7 @@ public slots:
 signals:
     void connected(bool connected);
     void received(const QString& message);
+    void audio_samples(const QVector<float>& samples);
     void status(const QString& message);
     void error(const QString& message);
 
@@ -253,14 +352,7 @@ public:
         outgoing_text_ = new QPlainTextEdit;
         outgoing_text_->setPlaceholderText(
             QStringLiteral("Message to transmit"));
-        waterfall_ = new QLabel(
-            QStringLiteral("TX waterfall: 1375-1625 Hz\n"
-                           "Native C++ spectrum display will be added with "
-                           "the audio backend."));
-        waterfall_->setMinimumHeight(90);
-        waterfall_->setStyleSheet(
-            QStringLiteral("QLabel { background: #101820; color: #d0d7de; "
-                            "padding: 12px; }"));
+        waterfall_ = new SpectrumWidget;
 
         auto* central = new QWidget;
         auto* layout = new QVBoxLayout(central);
@@ -303,6 +395,8 @@ public:
                 &MainWindow::connection_changed);
         connect(worker_, &SimulatorWorker::received, this,
                 &MainWindow::show_received);
+        connect(worker_, &SimulatorWorker::audio_samples, waterfall_,
+                &SpectrumWidget::set_samples);
         connect(worker_, &SimulatorWorker::status, this,
                 [this](const QString& message) {
                     statusBar()->showMessage(message);
@@ -315,6 +409,7 @@ public:
                 &SimulatorWorker::transmit);
         emit configuration_requested(tone_group_->checkedId(),
                                      bandwidth_group_->checkedId());
+        waterfall_->set_mode(bandwidth_group_->checkedId());
         thread_->start();
     }
 
@@ -377,6 +472,7 @@ private:
     void update_configuration() {
         emit configuration_requested(tone_group_->checkedId(),
                                      bandwidth_group_->checkedId());
+        waterfall_->set_mode(bandwidth_group_->checkedId());
     }
 
     void connection_changed(bool connected) {
@@ -395,7 +491,7 @@ private:
     QThread* thread_;
     SimulatorWorker* worker_;
     QLabel* station_label_;
-    QLabel* waterfall_;
+    SpectrumWidget* waterfall_;
     QPushButton* connection_button_;
     QPushButton* transmit_button_;
     QPlainTextEdit* received_text_;
@@ -459,6 +555,7 @@ std::optional<char> choose_start_mode(bool& real_mode) {
 
 int main(int argc, char** argv) {
     QApplication application(argc, argv);
+    qRegisterMetaType<QVector<float>>("QVector<float>");
     QCommandLineParser parser;
     parser.setApplicationDescription(
         QStringLiteral("Olivia Qt simulator for QMX+"));

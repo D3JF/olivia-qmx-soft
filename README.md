@@ -178,18 +178,13 @@ Type a message and press `TRANSMIT`. To create a new line in a transmitted
 message, type `\n`. The app converts that two-character sequence into a real
 line break before sending it.
 
-The app displays a transmit waterfall below the connection controls. It shows
-the Olivia signal energy across the selected mode's passband, centered at
-1500 Hz, while the transmission is running. It uses a 1024-point FFT with a
-128-sample hop for readable frequency detail and smooth scrolling. FFT work
-runs in a dedicated waterfall worker; the radio worker only queues audio for
-analysis and handles radio I/O. The GUI receives finished rows and paints them
-on a 30 FPS timer, so waterfall processing does not block transmission. The
-mode radio buttons are locked while transmitting, and the waterfall stops
-after the final queued row from the transmission has been painted.
-
-The live display uses a left-to-right time axis: frequency runs vertically and
-each new FFT slice is added at the right edge.
+The app displays a native C++ transmit spectrum below the connection controls.
+It receives generated simulator audio from the radio worker and renders a
+1024-point FFT in a Qt widget, centered on the 8 kHz simulator sample range.
+FFT painting runs on the GUI thread while modulation, packetization, and
+transmission remain on the worker thread, so the transmit operation does not
+block the window. The selected bandwidth is shown on the spectrum display.
+This simulator preview is not yet a physical QMX+ audio device backend.
 
 In simulator mode, the receiving station decodes each ordered UDP packet as
 soon as it arrives instead of waiting for the complete message. The first
