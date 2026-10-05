@@ -122,6 +122,22 @@ PortAudio SDK, set `PORTAUDIO_ROOT` to its installation prefix; the same C++
 backend is then used with the Windows PortAudio library instead of Linux
 `pkg-config`.
 
+The C++ branch also contains a small portable serial layer for QMX+ control.
+It enumerates Linux `/dev/ttyUSB*`, `/dev/ttyACM*`, and serial-by-id entries,
+and Windows COM ports, using 115200 8N1 configuration. The serial layer is
+currently exposed through `olivia_serial_info` and is not yet connected to the
+Real-mode GUI.
+
+The serial API uses native POSIX termios on Linux and Win32 COM handles on
+Windows, while keeping those details behind `SerialPort`. It configures
+115200 8N1 and exposes simple byte writes for the QMX+ `TX;` and `RX;`
+commands. Device opening and command sequencing will be integrated into the
+Real-mode worker after the audio and serial discovery milestones are complete.
+
+QMX+ initialization and transmit-state sequencing are represented by the
+separate `QmxRadio` helper. Its command writer is injectable, so command order
+and failure handling can be tested without a connected radio.
+
 The graphical app also needs an X11 display. When I run it from a remote
 Ubuntu machine, I use VcXsrv on Windows and connect with SSH X11 forwarding.
 The VS Code terminal must actually have a non-empty `DISPLAY` variable.

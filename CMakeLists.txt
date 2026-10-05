@@ -17,6 +17,15 @@ add_library(olivia_core
     cpp/src/olivia_modem.cpp
 )
 
+add_library(olivia_serial
+    cpp/src/serial_port.cpp
+    cpp/src/qmx_radio.cpp
+)
+target_include_directories(olivia_serial PUBLIC cpp/include)
+
+add_executable(olivia_serial_info cpp/src/olivia_serial_info.cpp)
+target_link_libraries(olivia_serial_info PRIVATE olivia_serial)
+
 target_include_directories(olivia_core
     PUBLIC
         cpp/include
@@ -106,4 +115,10 @@ if(BUILD_TESTING)
     )
     target_link_libraries(olivia_core_tests PRIVATE olivia_core)
     add_test(NAME olivia_core_tests COMMAND olivia_core_tests)
+
+    add_executable(olivia_serial_tests
+        cpp/tests/qmx_radio_tests.cpp
+    )
+    target_link_libraries(olivia_serial_tests PRIVATE olivia_serial)
+    add_test(NAME olivia_serial_tests COMMAND olivia_serial_tests)
 endif()
