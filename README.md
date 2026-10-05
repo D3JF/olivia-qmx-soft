@@ -104,9 +104,27 @@ OLIVIA_QMX_CHANNEL_PORT=45900 python olivia_qmx.py
 
 Use `OLIVIA_QMX_CHANNEL_PORT=45900` for Station B as well.
 
+If the app reports that a simulator UDP port is already in use, an older
+simulator window is still running on that channel. Close the older A/B pair,
+or start both stations with another shared `OLIVIA_QMX_CHANNEL_PORT` value.
+The transmit button remains disabled until the station connects successfully.
+
 Type a message and press `TRANSMIT`. To create a new line in a transmitted
 message, type `\n`. The app converts that two-character sequence into a real
 line break before sending it.
+
+The app displays a transmit waterfall below the connection controls. It shows
+the Olivia signal energy across the 1300-1700 Hz passband while the
+transmission is running. It uses a 1024-point FFT with a 128-sample hop for
+readable frequency detail and smooth scrolling. FFT work runs in the radio
+worker; the GUI only receives finished rows and paints them on a 30 FPS timer,
+so long transmissions do not block typing or controls. The waterfall stops
+after the final queued row from the transmission has been painted.
+
+In simulator mode, the receiving station decodes each ordered UDP packet as
+soon as it arrives instead of waiting for the complete message. The first
+decoded text still appears after Olivia has received one complete modem frame,
+which is expected for this slow mode.
 
 ## Run with a real QMX+
 
@@ -121,6 +139,13 @@ python olivia_qmx.py
 
 The app looks for a serial device identified as QRP Labs or QMX and for a
 matching USB audio device.
+
+The window shows the current connection state. If the QMX+ is unavailable at
+startup, connect it and press `Reconnect`. Use `Disconnect` before unplugging
+the radio, or to release the devices for another application. The
+`TRANSMIT` button is disabled while disconnected and while a transmission is
+in progress. If a transmission encounters a hardware error, the app returns
+to the disconnected state so it can be safely reconnected.
 
 ## Run the tests
 

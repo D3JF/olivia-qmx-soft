@@ -3,6 +3,7 @@ import os
 import sys
 import types
 import unittest
+import struct
 from unittest.mock import patch
 
 
@@ -193,6 +194,34 @@ class OliviaQmxTests(unittest.TestCase):
         self.assertEqual(app.target_station_port("A", 45800), 45802)
         self.assertEqual(app.target_station_port("B", 45800), 45801)
 
+    def test_simulator_reassembles_and_releases_contiguous_packets(self):
+        packets = {}
+        totals = {}
+        next_sequences = {}
+        make_packet = lambda sequence, payload: (
+            struct.pack("!4sIHH", b"OLIV", 7, sequence, 3) + payload
+        )
+
+        self.assertEqual(
+            app.reassemble_simulator_packet(
+                make_packet(1, b"one"), packets, totals, next_sequences
+            ),
+            [],
+        )
+        self.assertEqual(
+            app.reassemble_simulator_packet(
+                make_packet(0, b"zero"), packets, totals, next_sequences
+            ),
+            [b"zero", b"one"],
+        )
+        self.assertEqual(
+            app.reassemble_simulator_packet(
+                make_packet(2, b"two"), packets, totals, next_sequences
+            ),
+            [b"two"],
+        )
+        self.assertEqual((packets, totals, next_sequences), ({}, {}, {}))
+
     def test_target_station_port_rejects_invalid_station(self):
         with self.assertRaisesRegex(ValueError, "must be A or B"):
             app.target_station_port("C", 45800)
@@ -240,6 +269,17 @@ class OliviaQmxTests(unittest.TestCase):
 
         self.assertEqual(errors, ["TX failed: QMX+ is not connected."])
 
+    def test_simulator_transmit_requires_successful_connection(self):
+        worker = app.RadioWorker()
+        worker._simulator = True
+        worker._codec = app.OliviaCodec()
+        errors = []
+        worker.error.connect(errors.append)
+
+        worker.transmit("CQ")
+
+        self.assertEqual(errors, ["TX failed: QMX+ is not connected."])
+
     def test_transmit_ignores_whitespace_only_messages(self):
         worker = app.RadioWorker()
         worker._codec = app.OliviaCodec()
@@ -278,23 +318,72 @@ class OliviaQmxTests(unittest.TestCase):
     def test_worker_start_sends_frequency_and_usb_mode(self):
         worker = app.RadioWorker()
         serial_instance = FakeSerialPort("/dev/ttyUSB0", app.BAUD_RATE, 1)
+        connection_states = []
+        worker.connected.connect(connection_states.append)
         with patch.object(app, "qmx_port", return_value="/dev/ttyUSB0"), \
              patch.object(app, "qmx_audio_device", return_value=3), \
              patch.object(app.serial, "Serial", return_value=serial_instance):
             worker.start()
         self.assertEqual(serial_instance.writes, [b"FA00007040000;", b"MD2;"])
         self.assertEqual(worker._audio.kwargs["device"], 3)
+        self.assertEqual(connection_states, [True])
 
     def test_transmit_sends_tx_audio_then_rx(self):
         worker = app.RadioWorker()
         serial_instance = FakeSerialPort("/dev/ttyUSB0", app.BAUD_RATE, 1)
         worker._codec = app.OliviaCodec()
         worker._serial = serial_instance
+        worker._connected = True
+        transmission_states = []
+        transmission_samples = []
+        transmission_started = []
+        transmission_finished = []
+        worker.transmitting.connect(transmission_states.append)
+        worker.transmission_samples.connect(transmission_samples.append)
+        worker.transmission_started.connect(
+            lambda: transmission_started.append(True)
+        )
+        worker.transmission_finished.connect(
+            lambda: transmission_finished.append(True)
+        )
         with patch.object(app, "qmx_audio_device", return_value=4):
             worker.transmit("CQ")
         self.assertEqual(serial_instance.writes, [b"TX;", b"RX;"])
         self.assertEqual(FakeOutputStream.last_instance.kwargs["device"], 4)
         self.assertEqual(FakeOutputStream.last_instance.writes, [[[2.0], [2.0]]])
+        self.assertEqual(transmission_states, [True, False])
+        self.assertEqual(transmission_samples, [[2.0, 2.0]])
+        self.assertEqual(transmission_started, [True])
+        self.assertEqual(transmission_finished, [True])
+
+    def test_failed_connection_reports_disconnected_and_can_retry(self):
+        worker = app.RadioWorker()
+        connection_states = []
+        errors = []
+        worker.connected.connect(connection_states.append)
+        worker.error.connect(errors.append)
+        with patch.object(
+            app, "qmx_port", side_effect=RuntimeError("radio missing")
+        ):
+            worker.start()
+        self.assertEqual(connection_states, [False])
+        self.assertEqual(errors, ["radio missing"])
+        self.assertFalse(worker._connected)
+
+    def test_disconnect_returns_radio_to_receive_and_clears_connection(self):
+        worker = app.RadioWorker()
+        serial_instance = FakeSerialPort("/dev/ttyUSB0", app.BAUD_RATE, 1)
+        worker._serial = serial_instance
+        worker._connected = True
+        connection_states = []
+        worker.connected.connect(connection_states.append)
+
+        worker.disconnect_radio()
+
+        self.assertEqual(serial_instance.writes, [b"RX;"])
+        self.assertFalse(serial_instance.is_open)
+        self.assertEqual(connection_states, [False])
+        self.assertFalse(worker._connected)
 
     def test_stop_returns_radio_to_receive_and_closes_serial(self):
         worker = app.RadioWorker()
@@ -313,6 +402,7 @@ class OliviaQmxTests(unittest.TestCase):
         worker._codec = app.OliviaCodec()
         worker._rx_codec = app.OliviaCodec()
         worker._simulator = True
+        worker._connected = True
         worker._simulated_rx = queue.Queue()
         worker.transmit("HI")
         samples = []
