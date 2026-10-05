@@ -107,9 +107,11 @@ if(Qt5_FOUND)
         resources/olivia.qrc
     )
         if(WIN32)
+            target_sources(olivia_gui PRIVATE
+                resources/olivia.rc
+            )
             set_target_properties(olivia_gui PROPERTIES
                 WIN32_EXECUTABLE TRUE
-                RC_FILE "${CMAKE_SOURCE_DIR}/resources/olivia.rc"
             )
         endif()
         target_link_libraries(olivia_gui PRIVATE
