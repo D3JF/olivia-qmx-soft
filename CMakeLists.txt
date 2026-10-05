@@ -17,6 +17,14 @@ target_include_directories(olivia_core
         cpp/include
 )
 
+add_executable(olivia_app
+    cpp/src/olivia_app.cpp
+)
+target_link_libraries(olivia_app PRIVATE olivia_core)
+if(WIN32)
+    target_link_libraries(olivia_app PRIVATE ws2_32)
+endif()
+
 if(BUILD_TESTING)
     add_executable(olivia_core_tests
         cpp/tests/olivia_modem_tests.cpp

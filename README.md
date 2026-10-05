@@ -47,6 +47,26 @@ The Python application remains the behavioral reference while the port is
 developed in stages: codec, simulator transport, hardware adapters, then the
 desktop UI.
 
+### Windows simulator executable
+
+The first runnable C++ application slice is a native console simulator. Build
+it with the same CMake command above; the executable is `olivia_app.exe` on
+Windows. Run two Command Prompt or PowerShell windows:
+
+```powershell
+.\olivia_app.exe --station A
+.\olivia_app.exe --station B
+```
+
+Type a message in either window and press Enter. The stations exchange
+Olivia 8/250 audio over localhost UDP. Both instances must use the same
+`--channel-port` value; the default listens on ports 45801 and 45802. A
+single test message can be sent with:
+
+```powershell
+.\olivia_app.exe --station A --message "Hello from Windows"
+```
+
 ## Requirements
 
 This project is intended to run on Linux with Python 3.12 or newer.
