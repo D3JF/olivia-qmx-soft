@@ -99,6 +99,7 @@ public slots:
             emit error(QStringLiteral("TX failed: simulator is not connected."));
             return;
         }
+        emit status(QStringLiteral("Transmitting..."));
         configure_modem(tones, bandwidth);
         const auto samples = modem_.modulate(message.toLatin1().toStdString());
         ++transaction_id_;
