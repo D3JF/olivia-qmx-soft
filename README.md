@@ -27,6 +27,26 @@ The app defaults to Olivia 8/250, a common choice for CQ. The tone count and
 bandwidth can be changed with the radio buttons before or during a connection.
 The sample rate is 8000 Hz and the center frequency is 1500 Hz.
 
+## C++ port
+
+The `cpp-port` branch contains the start of a portable C++17 rewrite. The
+first slice is the Olivia codec in `cpp/include/olivia_modem.hpp` and
+`cpp/src/olivia_modem.cpp`; it has no Python, Qt, PortAudio, or serial
+dependencies. A CMake/CTest target exercises incremental decoding and codec
+configuration validation.
+
+Build the C++ core on Linux, macOS, or Windows with CMake:
+
+```bash
+cmake -S . -B build -DBUILD_TESTING=ON
+cmake --build build
+ctest --test-dir build --output-on-failure
+```
+
+The Python application remains the behavioral reference while the port is
+developed in stages: codec, simulator transport, hardware adapters, then the
+desktop UI.
+
 ## Requirements
 
 This project is intended to run on Linux with Python 3.12 or newer.
