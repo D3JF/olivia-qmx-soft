@@ -4,6 +4,7 @@
 
 Name "${APP_NAME}"
 OutFile "..\Olivia-QMX+-${APP_VERSION}-win64-setup.exe"
+Icon "..\resources\olivia.ico"
 InstallDir "$PROGRAMFILES64\${APP_NAME}"
 RequestExecutionLevel admin
 
@@ -18,8 +19,9 @@ Section
   WriteUninstaller "$INSTDIR\uninstall.exe"
   CreateDirectory "$SMPROGRAMS\${APP_NAME}"
   CreateShortCut "$SMPROGRAMS\${APP_NAME}\${APP_NAME}.lnk" \
-    "$INSTDIR\olivia_gui.exe"
-  CreateShortCut "$DESKTOP\${APP_NAME}.lnk" "$INSTDIR\olivia_gui.exe"
+    "$INSTDIR\olivia_gui.exe" "" "$INSTDIR\olivia_gui.exe" 0
+  CreateShortCut "$DESKTOP\${APP_NAME}.lnk" \
+    "$INSTDIR\olivia_gui.exe" "" "$INSTDIR\olivia_gui.exe" 0
   WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APP_NAME}" \
     "DisplayName" "${APP_NAME}"
   WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APP_NAME}" \

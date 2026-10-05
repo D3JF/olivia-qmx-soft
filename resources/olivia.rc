@@ -1,1 +1,2 @@
-IDI_ICON1 ICON DISCARDABLE "olivia.ico"
+#define IDI_ICON1 1
+IDI_ICON1 ICON "olivia.ico"
