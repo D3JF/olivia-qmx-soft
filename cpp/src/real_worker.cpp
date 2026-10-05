@@ -33,12 +33,14 @@ void RealWorker::start() {
     if (!serial_->open(configuration_.serial_path, 115200, error_message)) {
         emit error(QStringLiteral("Could not open QMX+ serial port: %1")
                        .arg(QString::fromStdString(error_message)));
+        emit connected(false);
         return;
     }
     if (!radio_->initialize(error_message)) {
         emit error(QStringLiteral("Could not initialize QMX+: %1")
                        .arg(QString::fromStdString(error_message)));
         serial_->close();
+        emit connected(false);
         return;
     }
 
@@ -56,6 +58,7 @@ void RealWorker::start() {
                 emit error(QString::fromStdString(message));
             })) {
         serial_->close();
+        emit connected(false);
         return;
     }
 
@@ -66,6 +69,7 @@ void RealWorker::start() {
 
 void RealWorker::stop() {
     if (!running_ && (!serial_ || !serial_->is_open())) {
+        emit connected(false);
         return;
     }
     audio_->stop();

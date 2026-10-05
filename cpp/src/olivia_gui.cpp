@@ -633,7 +633,7 @@ public:
         outgoing_text_->setPlaceholderText(
             QStringLiteral("Message to transmit"));
         transmit_button_ = new QPushButton(QStringLiteral("TRANSMIT"));
-        connection_button_ = new QPushButton(QStringLiteral("Disconnect"));
+        connection_button_ = new QPushButton(QStringLiteral("Connect"));
         clear_button_ = new QPushButton(QStringLiteral("Clear received"));
 
         auto* central = new QWidget;
@@ -649,6 +649,7 @@ public:
         layout->addWidget(transmit_button_);
         layout->addWidget(clear_button_);
         setCentralWidget(central);
+        connection_button_->setEnabled(false);
         transmit_button_->setEnabled(false);
         statusBar()->showMessage(QStringLiteral("Starting QMX+..."));
 
@@ -660,6 +661,8 @@ public:
                 &QPlainTextEdit::clear);
         connect(thread_, &QThread::started, worker_, &olivia::RealWorker::start);
         connect(thread_, &QThread::finished, worker_, &QObject::deleteLater);
+        connect(this, &RealWindow::start_requested, worker_,
+                &olivia::RealWorker::start);
         connect(this, &RealWindow::stop_requested, worker_,
                 &olivia::RealWorker::stop);
         connect(this, &RealWindow::transmit_requested, worker_,
@@ -692,12 +695,19 @@ public:
     }
 
 signals:
+    void start_requested();
     void stop_requested();
     void transmit_requested(const QString& message);
 
 private:
     void toggle_connection() {
-        emit stop_requested();
+        if (connection_button_->text() == QStringLiteral("Disconnect")) {
+            emit stop_requested();
+        } else {
+            connection_button_->setEnabled(false);
+            statusBar()->showMessage(QStringLiteral("Connecting to QMX+..."));
+            emit start_requested();
+        }
         connection_button_->setEnabled(false);
     }
 
@@ -712,11 +722,10 @@ private:
     }
 
     void connection_changed(bool connected) {
-        connection_button_->setEnabled(connected);
+        connection_button_->setText(connected ? QStringLiteral("Disconnect")
+                                              : QStringLiteral("Connect"));
+        connection_button_->setEnabled(true);
         transmit_button_->setEnabled(connected);
-        if (!connected) {
-            connection_button_->setText(QStringLiteral("Disconnected"));
-        }
     }
 
     void show_received(const QString& message) {
