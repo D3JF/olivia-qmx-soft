@@ -180,10 +180,15 @@ line break before sending it.
 
 The app displays a native C++ transmit waterfall below the connection
 controls. It receives generated simulator audio from the radio worker, uses
-512-point FFTs with a 512-sample hop, and appends each spectrum as a color
-column from left to right (oldest on the left, newest on the right). The
+1024-sample Hann-windowed frames are zero-padded to a 4096-point FFT, with a
+256-sample hop. Each spectrum is appended as a color row from top to bottom:
+frequency runs left-to-right and time runs top-to-bottom (oldest at the top,
+newest at the bottom). The longer window and zero-padding provide denser
+frequency interpolation at the cost of time resolution. The
 vertical axis zooms around the 1500 Hz Olivia center frequency so the tones
-are visible; the selected bandwidth is shown below the plot. FFT painting
+are visible, with a small margin beyond the selected passband. The display
+uses a MATLAB-style jet color palette, and the selected bandwidth is shown
+below the plot. FFT painting
 runs on the GUI thread while modulation, packetization, and transmission
 remain on the worker thread, so the transmit operation does not block the
 window. This simulator preview is not yet a physical QMX+ audio device

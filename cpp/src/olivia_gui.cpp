@@ -25,6 +25,7 @@
 #include <QWidget>
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <complex>
 #include <cstdint>
@@ -40,8 +41,10 @@ constexpr int sample_rate = 8000;
 constexpr int default_port = 45800;
 constexpr int packet_samples = 2048;
 constexpr int receive_buffer_bytes = 4 * 1024 * 1024;
-constexpr int spectrum_size = 512;
+constexpr int spectrum_input_size = 1024;
+constexpr int spectrum_fft_size = 4096;
 constexpr int center_frequency = 1500;
+constexpr int waterfall_row_height = 3;
 constexpr double pi = 3.14159265358979323846;
 
 struct Configuration {
@@ -52,20 +55,23 @@ struct Configuration {
 class SpectrumWidget final : public QWidget {
 public:
     explicit SpectrumWidget(QWidget* parent = nullptr) : QWidget(parent) {
-        setMinimumHeight(140);
+        setMinimumHeight(280);
         setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
-        waterfall_ = QImage(768, 180, QImage::Format_RGB32);
+        waterfall_ = QImage(768, 360, QImage::Format_RGB32);
+        for (int index = 0; index < spectrum_input_size; ++index) {
+            window_[index] =
+                0.5 -
+                0.5 * std::cos(2.0 * pi * index / spectrum_input_size);
+        }
+        render_timer_.setInterval(32);
+        connect(&render_timer_, &QTimer::timeout, this,
+                &SpectrumWidget::render_pending);
+        render_timer_.start();
         clear();
     }
 
     void set_samples(const QVector<float>& samples) {
         pending_samples_ += samples;
-        while (pending_samples_.size() >= spectrum_size) {
-            append_spectrum_column(pending_samples_.constData(),
-                                   spectrum_size);
-            pending_samples_.remove(0, spectrum_hop);
-        }
-        update();
     }
 
     void clear() {
@@ -96,87 +102,132 @@ protected:
         painter.setPen(QColor(QStringLiteral("#d0d7de")));
         painter.drawText(6, 16, QStringLiteral("TX waterfall"));
         painter.drawText(plot.left(), height() - 10,
-                         QStringLiteral("Time: old"));
-        painter.drawText(plot.right() - 52, height() - 10,
-                         QStringLiteral("now"));
-        painter.drawText(18, plot.top() + 12,
-                         QStringLiteral("%1 Hz").arg(max_frequency()));
-        painter.drawText(18, plot.center().y() + 5,
+                         QStringLiteral("%1 Hz").arg(min_frequency()));
+        painter.drawText(plot.center().x() - 24, height() - 10,
                          QStringLiteral("%1 Hz").arg(center_frequency));
-        painter.drawText(30, plot.bottom(), QStringLiteral("%1 Hz").arg(
-            min_frequency()));
+        painter.drawText(plot.right() - 58, height() - 10,
+                         QStringLiteral("%1 Hz").arg(max_frequency()));
+        painter.drawText(plot.center().x() - 48, height() - 24,
+                         QStringLiteral("Frequency (Hz)"));
+        painter.drawText(18, plot.top() + 12, QStringLiteral("old"));
+        painter.drawText(18, plot.bottom(), QStringLiteral("now"));
         painter.save();
         painter.translate(12, plot.center().y());
         painter.rotate(-90);
-        painter.drawText(0, 0, QStringLiteral("Frequency (Hz)"));
+        painter.drawText(0, 0, QStringLiteral("Time"));
         painter.restore();
         painter.drawText(plot.right() - 105, height() - 10,
                          QStringLiteral("BW %1 Hz").arg(bandwidth_));
     }
 
 private:
-    void append_spectrum_column(const float* samples, int count) {
-        std::vector<std::complex<double>> spectrum(spectrum_size);
-        for (int index = 0; index < count; ++index) {
-            const double window =
-                0.5 - 0.5 * std::cos(2.0 * pi * index / spectrum_size);
-            spectrum[index] = samples[index] * window;
+    void render_pending() {
+        constexpr int rows_per_frame = 1;
+        int rows_rendered = 0;
+        while (pending_samples_.size() >= spectrum_input_size &&
+               rows_rendered < rows_per_frame) {
+            append_spectrum_row(pending_samples_.constData(),
+                                spectrum_input_size);
+            pending_samples_.remove(0, spectrum_hop);
+            ++rows_rendered;
         }
-        for (int length = 2; length <= spectrum_size; length *= 2) {
-            for (int start = 0; start < spectrum_size; start += length) {
+        if (rows_rendered > 0) {
+            update();
+        }
+    }
+
+    void append_spectrum_row(const float* samples, int count) {
+        std::array<std::complex<double>, spectrum_fft_size> spectrum{};
+        for (int index = 0; index < count; ++index) {
+            spectrum[index] = samples[index] * window_[index];
+        }
+        for (int length = 2; length <= spectrum_fft_size; length *= 2) {
+            const double angle = -2.0 * pi / static_cast<double>(length);
+            const auto stage_factor = std::polar(1.0, angle);
+            for (int start = 0; start < spectrum_fft_size; start += length) {
+                auto factor = std::complex<double>(1.0, 0.0);
                 for (int index = 0; index < length / 2; ++index) {
-                    const double angle =
-                        -2.0 * pi * index / static_cast<double>(length);
-                    const auto factor = std::polar(1.0, angle);
                     const auto even = spectrum[start + index];
                     const auto odd = spectrum[start + index + length / 2] *
                                      factor;
                     spectrum[start + index] = even + odd;
                     spectrum[start + index + length / 2] = even - odd;
+                    factor *= stage_factor;
                 }
             }
         }
-        QImage shifted(waterfall_.size(), waterfall_.format());
-        shifted.fill(QColor(QStringLiteral("#101820")));
-        {
-            QPainter painter(&shifted);
-            painter.drawImage(-1, 0, waterfall_);
-        }
-        waterfall_ = std::move(shifted);
-        for (int y = 0; y < waterfall_.height(); ++y) {
+        const int row_bytes = waterfall_.bytesPerLine();
+        const int shift_rows =
+            std::min(waterfall_row_height, waterfall_.height());
+        std::memmove(waterfall_.scanLine(0),
+                     waterfall_.scanLine(shift_rows),
+                     static_cast<std::size_t>(row_bytes) *
+                         (waterfall_.height() - shift_rows));
+        std::array<QRgb, 768> colors{};
+        for (int x = 0; x < waterfall_.width(); ++x) {
             const double frequency =
-                max_frequency() -
-                static_cast<double>(y) * frequency_span() /
-                    (waterfall_.height() - 1);
+                min_frequency() +
+                static_cast<double>(x) * frequency_span() /
+                    (waterfall_.width() - 1);
             const int bin = std::clamp(
                 static_cast<int>(std::round(
-                    frequency * spectrum_size / sample_rate)),
-                0, spectrum_size / 2 - 1);
+                    frequency * spectrum_fft_size / sample_rate)),
+                0, spectrum_fft_size / 2 - 1);
             const double magnitude =
-                std::abs(spectrum[bin]) / spectrum_size;
-            const double level =
-                std::clamp((20.0 * std::log10(magnitude + 1.0e-6) + 80.0) /
-                               80.0,
-                           0.0, 1.0);
-            waterfall_.setPixelColor(
-                waterfall_.width() - 1, y,
-                QColor::fromHsvF(0.66 - 0.66 * level, 0.9, 0.2 + 0.8 * level));
+                std::abs(spectrum[bin]) / spectrum_input_size;
+            const double decibels = 20.0 * std::log10(magnitude + 1.0e-9);
+            const double normalized =
+                std::clamp((decibels + 65.0) / 55.0, 0.0, 1.0);
+            const double level = std::pow(normalized, 0.7);
+            const QColor color = waterfall_color(level);
+            colors[static_cast<std::size_t>(x)] = color.rgb();
         }
+        for (int row_index = waterfall_.height() - shift_rows;
+             row_index < waterfall_.height(); ++row_index) {
+            auto* row =
+                reinterpret_cast<QRgb*>(waterfall_.scanLine(row_index));
+            std::copy(colors.begin(), colors.begin() + waterfall_.width(),
+                      row);
+        }
+    }
+
+    QColor waterfall_color(double level) const {
+        static constexpr std::array<QColor, 7> jet = {
+            QColor(0, 0, 128),   QColor(0, 0, 255),   QColor(0, 255, 255),
+            QColor(0, 128, 0),  QColor(255, 255, 0), QColor(255, 0, 0),
+            QColor(128, 0, 0)};
+        const double scaled =
+            std::clamp(level, 0.0, 1.0) * (jet.size() - 1);
+        const int lower = std::min(static_cast<int>(scaled),
+                                   static_cast<int>(jet.size() - 2));
+        const double amount = scaled - lower;
+        const auto& first = jet[lower];
+        const auto& second = jet[lower + 1];
+        return QColor(
+            static_cast<int>(first.red() +
+                             amount * (second.red() - first.red())),
+            static_cast<int>(first.green() +
+                             amount * (second.green() - first.green())),
+            static_cast<int>(first.blue() +
+                             amount * (second.blue() - first.blue())));
     }
 
     int min_frequency() const {
-        return std::max(1000, center_frequency - bandwidth_ * 2);
+        return std::max(0, center_frequency - (3 * bandwidth_) / 4);
     }
 
     int max_frequency() const {
-        return std::min(sample_rate / 2, center_frequency + bandwidth_ * 2);
+        return std::min(sample_rate / 2,
+                        center_frequency + (3 * bandwidth_) / 4);
     }
 
     int frequency_span() const { return max_frequency() - min_frequency(); }
 
-    static constexpr int spectrum_hop = 512;
+    static constexpr int spectrum_hop = 256;
     QVector<float> pending_samples_;
     QImage waterfall_;
+    std::array<double, spectrum_input_size> window_{};
+    QTimer render_timer_;
     int bandwidth_ = 250;
 };
 
