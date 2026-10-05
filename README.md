@@ -13,6 +13,11 @@ radio.
 
 **I vibe coded this.** __Please don't stone me to death__. I had to make a quick prototype and it turns out that GitHub Copilot is pretty good now.
 
+## License
+
+This project is licensed under the GNU General Public License, version 3 or
+later. See [LICENSE](LICENSE) for the complete license text.
+
 ## What it does
 
 - Olivia modulation and demodulation with selectable tone counts (2-256) and
