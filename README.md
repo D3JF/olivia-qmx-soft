@@ -9,6 +9,10 @@ simulator mode with two local windows talking to each other.
 The simulator is useful for testing the application before connecting the
 radio.
 
+## Disclaimer
+
+**I vibe coded this.** __Please don't stone me to death__. I had to make a quick prototype and it turns out that GitHub Copilot is pretty good now.
+
 ## What it does
 
 - Olivia 8/250 modulation and demodulation
@@ -212,7 +216,3 @@ the forwarding tunnel.
 
 This is an initial test version. I am keeping it small while I work out what
 should come next.
-
-## Disclaimer
-
-**I vibe coded this.** Please don't stone me to death. I had to make a quick prototype and it turns out that GitHub Copilot is pretty good now.
