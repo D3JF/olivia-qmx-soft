@@ -4,6 +4,7 @@ build-windows/
 build-*/
 olivia-gui-windows-x64/
 olivia-gui-windows-x64-audio/
+olivia-gui-windows-x64-real/
 __pycache__/
 *.py[cod]
 .pytest_cache/
