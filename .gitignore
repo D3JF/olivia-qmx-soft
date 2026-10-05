@@ -1,6 +1,8 @@
 .venv/
 build/
 build-windows/
+build-*/
+olivia-gui-windows-x64/
 __pycache__/
 *.py[cod]
 .pytest_cache/
