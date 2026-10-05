@@ -121,6 +121,9 @@ worker; the GUI only receives finished rows and paints them on a 30 FPS timer,
 so long transmissions do not block typing or controls. The waterfall stops
 after the final queued row from the transmission has been painted.
 
+The live display uses a left-to-right time axis: frequency runs vertically and
+each new FFT slice is added at the right edge.
+
 In simulator mode, the receiving station decodes each ordered UDP packet as
 soon as it arrives instead of waiting for the complete message. The first
 decoded text still appears after Olivia has received one complete modem frame,

@@ -21,7 +21,7 @@ import numpy as np
 import serial
 from serial.tools import list_ports
 import sounddevice as sd
-from PyQt5.QtCore import QTimer, QObject, QThread, pyqtSignal, pyqtSlot
+from PyQt5.QtCore import QTimer, QObject, QThread, QRect, pyqtSignal, pyqtSlot
 from PyQt5.QtGui import QColor, QImage, QPainter
 from PyQt5.QtWidgets import (
     QApplication,
@@ -136,6 +136,7 @@ class WaterfallWidget(QWidget):
         self._pending_rows: deque[np.ndarray] = deque()
         self._transmission_active = False
         self._transmission_finishing = False
+        self._next_column = 0
         self._paint_timer = QTimer(self)
         self._paint_timer.setInterval(33)
         self._paint_timer.timeout.connect(self._paint_pending_rows)
@@ -165,6 +166,7 @@ class WaterfallWidget(QWidget):
         self._pending_rows.clear()
         self._transmission_active = True
         self._transmission_finishing = False
+        self._next_column = 0
         self._paint_timer.start()
         self.update()
 
@@ -191,31 +193,33 @@ class WaterfallWidget(QWidget):
         painter = QPainter(self._image)
         for _ in range(min(4, len(self._pending_rows))):
             source_row = self._pending_rows.popleft()
-            positions = np.linspace(0, len(source_row) - 1, self._image.width())
-            row = np.interp(positions, np.arange(len(source_row)), source_row)
-            painter.drawImage(
-                0,
-                0,
-                self._image,
-                0,
-                1,
-                self._image.width(),
-                self._image.height() - 1,
+            positions = np.linspace(
+                0, len(source_row) - 1, self._image.height()
             )
-            y = self._image.height() - 1
-            for x, value in enumerate(row):
+            column = np.interp(
+                positions, np.arange(len(source_row)), source_row
+            )
+            width = self._image.width()
+            height = self._image.height()
+            if self._next_column >= width:
+                painter.drawImage(
+                    QRect(0, 0, width - 1, height),
+                    self._image,
+                    QRect(1, 0, width - 1, height),
+                )
+                self._next_column = width - 1
+            for y, value in enumerate(column):
                 red = int(255 * value)
                 green = int(180 * value)
                 blue = int(255 * (1 - value))
-                x0 = int(x * self._image.width() / len(row))
-                x1 = int((x + 1) * self._image.width() / len(row))
                 painter.fillRect(
-                    x0,
+                    self._next_column,
                     y,
-                    max(1, x1 - x0),
+                    1,
                     1,
                     QColor(red, green, blue),
                 )
+            self._next_column += 1
         painter.end()
         self.update()
 
