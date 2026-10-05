@@ -220,6 +220,7 @@ public:
           channel_port_(channel_port),
           thread_(new QThread(this)),
           worker_(new SimulatorWorker(station, channel_port)) {
+        worker_->moveToThread(thread_);
         setWindowTitle(QStringLiteral("Olivia MFSK - QMX+ (Station %1)")
                            .arg(QChar(station)));
         resize(720, 600);
@@ -270,6 +271,7 @@ public:
         connect(clear_button_, &QPushButton::clicked, received_text_,
                 &QPlainTextEdit::clear);
         connect(thread_, &QThread::started, worker_, &SimulatorWorker::start);
+        connect(thread_, &QThread::finished, worker_, &QObject::deleteLater);
         connect(this, &MainWindow::start_requested, worker_,
                 &SimulatorWorker::start);
         connect(this, &MainWindow::stop_requested, worker_,
@@ -300,7 +302,7 @@ public:
         }
         thread_->quit();
         thread_->wait();
-        delete worker_;
+        worker_ = nullptr;
     }
 
 signals:
