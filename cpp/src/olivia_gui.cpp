@@ -40,7 +40,8 @@ constexpr int sample_rate = 8000;
 constexpr int default_port = 45800;
 constexpr int packet_samples = 2048;
 constexpr int receive_buffer_bytes = 4 * 1024 * 1024;
-constexpr int spectrum_size = 1024;
+constexpr int spectrum_size = 512;
+constexpr int center_frequency = 1500;
 constexpr double pi = 3.14159265358979323846;
 
 struct Configuration {
@@ -84,7 +85,7 @@ protected:
         painter.fillRect(rect(), QColor(QStringLiteral("#101820")));
         painter.setRenderHint(QPainter::Antialiasing);
 
-        const QRect plot = rect().adjusted(58, 12, -18, -38);
+        const QRect plot = rect().adjusted(78, 24, -18, -38);
         painter.setPen(QColor(QStringLiteral("#52606d")));
         painter.drawRect(plot);
         if (plot.width() < 2 || plot.height() < 2) {
@@ -93,15 +94,19 @@ protected:
         painter.drawImage(plot, waterfall_);
 
         painter.setPen(QColor(QStringLiteral("#d0d7de")));
-        painter.drawText(6, 20, QStringLiteral("TX waterfall"));
-        painter.drawText(plot.left(), height() - 10, QStringLiteral("Time"));
-        painter.drawText(plot.right() - 56, height() - 10,
+        painter.drawText(6, 16, QStringLiteral("TX waterfall"));
+        painter.drawText(plot.left(), height() - 10,
+                         QStringLiteral("Time: old"));
+        painter.drawText(plot.right() - 52, height() - 10,
                          QStringLiteral("now"));
-        painter.drawText(6, plot.top() + 12, QStringLiteral("4 kHz"));
-        painter.drawText(10, plot.center().y() + 5, QStringLiteral("2 kHz"));
-        painter.drawText(18, plot.bottom(), QStringLiteral("0"));
+        painter.drawText(18, plot.top() + 12,
+                         QStringLiteral("%1 Hz").arg(max_frequency()));
+        painter.drawText(18, plot.center().y() + 5,
+                         QStringLiteral("%1 Hz").arg(center_frequency));
+        painter.drawText(30, plot.bottom(), QStringLiteral("%1 Hz").arg(
+            min_frequency()));
         painter.save();
-        painter.translate(13, plot.center().y());
+        painter.translate(12, plot.center().y());
         painter.rotate(-90);
         painter.drawText(0, 0, QStringLiteral("Frequency (Hz)"));
         painter.restore();
@@ -139,9 +144,14 @@ private:
         }
         waterfall_ = std::move(shifted);
         for (int y = 0; y < waterfall_.height(); ++y) {
-            const int bin = (waterfall_.height() - 1 - y) *
-                            (spectrum_size / 2 - 1) /
-                            (waterfall_.height() - 1);
+            const double frequency =
+                max_frequency() -
+                static_cast<double>(y) * frequency_span() /
+                    (waterfall_.height() - 1);
+            const int bin = std::clamp(
+                static_cast<int>(std::round(
+                    frequency * spectrum_size / sample_rate)),
+                0, spectrum_size / 2 - 1);
             const double magnitude =
                 std::abs(spectrum[bin]) / spectrum_size;
             const double level =
@@ -154,7 +164,17 @@ private:
         }
     }
 
-    static constexpr int spectrum_hop = 128;
+    int min_frequency() const {
+        return std::max(1000, center_frequency - bandwidth_ * 2);
+    }
+
+    int max_frequency() const {
+        return std::min(sample_rate / 2, center_frequency + bandwidth_ * 2);
+    }
+
+    int frequency_span() const { return max_frequency() - min_frequency(); }
+
+    static constexpr int spectrum_hop = 512;
     QVector<float> pending_samples_;
     QImage waterfall_;
     int bandwidth_ = 250;

@@ -180,12 +180,14 @@ line break before sending it.
 
 The app displays a native C++ transmit waterfall below the connection
 controls. It receives generated simulator audio from the radio worker, uses
-overlapping 1024-point FFTs, and appends each spectrum as a color column from
-left to right. The horizontal axis is time and the vertical axis is frequency
-(0-4 kHz); the selected bandwidth is shown below the plot. FFT painting runs
-on the GUI thread while modulation, packetization, and transmission remain on
-the worker thread, so the transmit operation does not block the window. This
-simulator preview is not yet a physical QMX+ audio device backend.
+512-point FFTs with a 512-sample hop, and appends each spectrum as a color
+column from left to right (oldest on the left, newest on the right). The
+vertical axis zooms around the 1500 Hz Olivia center frequency so the tones
+are visible; the selected bandwidth is shown below the plot. FFT painting
+runs on the GUI thread while modulation, packetization, and transmission
+remain on the worker thread, so the transmit operation does not block the
+window. This simulator preview is not yet a physical QMX+ audio device
+backend.
 
 In simulator mode, the receiving station decodes each ordered UDP packet as
 soon as it arrives instead of waiting for the complete message. The first
