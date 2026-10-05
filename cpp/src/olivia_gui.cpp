@@ -26,7 +26,9 @@
 #include <cstdint>
 #include <cstring>
 #include <memory>
+#include <map>
 #include <optional>
+#include <unordered_map>
 
 namespace {
 
@@ -77,6 +79,9 @@ public slots:
 
     void stop() {
         running_ = false;
+        packets_.clear();
+        packet_totals_.clear();
+        next_sequences_.clear();
         if (socket_ != nullptr) {
             socket_->close();
             socket_->deleteLater();
@@ -137,26 +142,47 @@ private slots:
             quint16 total = 0;
             stream.readRawData(magic, 4);
             stream >> transaction >> sequence >> total;
-            Q_UNUSED(transaction);
-            Q_UNUSED(sequence);
-            Q_UNUSED(total);
             const int payload_size = packet.size() - 12;
-            if (payload_size <= 0 ||
+            if (total == 0 || sequence >= total || payload_size <= 0 ||
                 payload_size % static_cast<int>(sizeof(float)) != 0) {
                 continue;
             }
-            std::vector<float> samples(payload_size / sizeof(float));
-            std::memcpy(samples.data(), packet.constData() + 12,
-                        static_cast<std::size_t>(payload_size));
-            const auto decoded = modem_.demodulate(samples);
-            if (!decoded.empty()) {
-                emit received(QString::fromLatin1(decoded.data(),
-                                                  static_cast<int>(decoded.size())));
+
+            auto& transaction_packets = packets_[transaction];
+            transaction_packets[sequence] = packet.mid(12);
+            packet_totals_[transaction] = total;
+            auto& next_sequence = next_sequences_[transaction];
+            while (transaction_packets.find(next_sequence) !=
+                   transaction_packets.end()) {
+                const auto payload = transaction_packets[next_sequence];
+                transaction_packets.erase(next_sequence);
+                decode_payload(payload);
+                ++next_sequence;
+            }
+            if (next_sequence == packet_totals_[transaction]) {
+                packets_.erase(transaction);
+                packet_totals_.erase(transaction);
+                next_sequences_.erase(transaction);
             }
         }
     }
 
 private:
+    void decode_payload(const QByteArray& payload) {
+        if (payload.isEmpty() ||
+            payload.size() % static_cast<int>(sizeof(float)) != 0) {
+            return;
+        }
+        std::vector<float> samples(payload.size() / sizeof(float));
+        std::memcpy(samples.data(), payload.constData(),
+                    static_cast<std::size_t>(payload.size()));
+        const auto decoded = modem_.demodulate(samples);
+        if (!decoded.empty()) {
+            emit received(QString::fromLatin1(
+                decoded.data(), static_cast<int>(decoded.size())));
+        }
+    }
+
     int listen_port() const {
         return channel_port_ + (station_ == 'A' ? 1 : 2);
     }
@@ -171,6 +197,10 @@ private:
     bool running_;
     olivia::OliviaModem modem_;
     quint32 transaction_id_;
+    std::unordered_map<quint32, std::map<quint16, QByteArray>>
+        packets_;
+    std::unordered_map<quint32, quint16> packet_totals_;
+    std::unordered_map<quint32, quint16> next_sequences_;
 };
 
 class MainWindow final : public QMainWindow {
