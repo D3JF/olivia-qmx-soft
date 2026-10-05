@@ -35,6 +35,7 @@ namespace {
 constexpr int sample_rate = 8000;
 constexpr int default_port = 45800;
 constexpr int packet_samples = 2048;
+constexpr int receive_buffer_bytes = 4 * 1024 * 1024;
 
 struct Configuration {
     int tones = 8;
@@ -59,6 +60,9 @@ public slots:
             return;
         }
         socket_ = new QUdpSocket(this);
+        socket_->setSocketOption(
+            QAbstractSocket::ReceiveBufferSizeSocketOption,
+            receive_buffer_bytes);
         if (!socket_->bind(QHostAddress::LocalHost, listen_port())) {
             emit error(QStringLiteral("Could not bind UDP port %1: %2")
                            .arg(listen_port())
@@ -115,6 +119,10 @@ public slots:
                           count * static_cast<int>(sizeof(float)));
             socket_->writeDatagram(packet, QHostAddress::LocalHost,
                                    target_port());
+            if (sequence + 1 < total_packets) {
+                QThread::msleep(
+                    static_cast<unsigned long>(1000.0 * count / sample_rate));
+            }
         }
         emit status(QStringLiteral("Transmitted: %1").arg(message));
     }
