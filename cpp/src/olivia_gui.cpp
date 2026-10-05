@@ -336,7 +336,8 @@ int main(int argc, char** argv) {
         QStringLiteral("Olivia Qt simulator for QMX+"));
     parser.addHelpOption();
     QCommandLineOption station_option(
-        {"s", "station"}, "Simulator station (A or B).", "station");
+        {"s", "station"}, "Simulator station (A or B; default A).", "station",
+        QStringLiteral("A"));
     QCommandLineOption port_option(
         {"p", "channel-port"}, "Shared simulator channel port.", "port",
         QString::number(default_port));

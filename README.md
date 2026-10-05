@@ -57,9 +57,12 @@ later adapter.
 Run the Qt simulator with two instances:
 
 ```powershell
-.\olivia_gui.exe --station A
+.\olivia_gui.exe
 .\olivia_gui.exe --station B
 ```
+
+Launching `olivia_gui.exe` from Explorer starts Station A by default. Use
+`--station B` for the second instance.
 
 ### Windows simulator executable
 
