@@ -36,25 +36,37 @@ if(NOT OLIVIA_AUDIO STREQUAL "OFF")
     if(PkgConfig_FOUND AND NOT CMAKE_CROSSCOMPILING)
         pkg_check_modules(PORTAUDIO QUIET IMPORTED_TARGET portaudio-2.0)
     endif()
-    if(NOT TARGET PkgConfig::PORTAUDIO AND PORTAUDIO_ROOT)
-        find_path(PORTAUDIO_INCLUDE_DIR portaudio.h
-            PATHS "${PORTAUDIO_ROOT}/include" NO_DEFAULT_PATH)
-        find_library(PORTAUDIO_LIBRARY NAMES portaudio
-            PATHS "${PORTAUDIO_ROOT}/lib" "${PORTAUDIO_ROOT}/lib64"
-            NO_DEFAULT_PATH)
+    if(PORTAUDIO_ROOT)
+        if(EXISTS "${PORTAUDIO_ROOT}/include/portaudio.h")
+            set(PORTAUDIO_INCLUDE_DIR "${PORTAUDIO_ROOT}/include")
+        endif()
+        foreach(portaudio_library_name
+                libportaudio.dll.a libportaudio.a portaudio.lib)
+            if(EXISTS "${PORTAUDIO_ROOT}/lib/${portaudio_library_name}")
+                set(PORTAUDIO_LIBRARY
+                    "${PORTAUDIO_ROOT}/lib/${portaudio_library_name}")
+                break()
+            endif()
+            if(EXISTS "${PORTAUDIO_ROOT}/lib64/${portaudio_library_name}")
+                set(PORTAUDIO_LIBRARY
+                    "${PORTAUDIO_ROOT}/lib64/${portaudio_library_name}")
+                break()
+            endif()
+        endforeach()
         if(PORTAUDIO_INCLUDE_DIR AND PORTAUDIO_LIBRARY)
-            add_library(PortAudio::PortAudio UNKNOWN IMPORTED)
-            set_target_properties(PortAudio::PortAudio PROPERTIES
+            add_library(Olivia::PortAudio UNKNOWN IMPORTED)
+            set_target_properties(Olivia::PortAudio PROPERTIES
                 IMPORTED_LOCATION "${PORTAUDIO_LIBRARY}"
+                IMPORTED_IMPLIB "${PORTAUDIO_LIBRARY}"
                 INTERFACE_INCLUDE_DIRECTORIES "${PORTAUDIO_INCLUDE_DIR}")
         endif()
     endif()
 endif()
-if(TARGET PkgConfig::PORTAUDIO OR TARGET PortAudio::PortAudio)
-    if(TARGET PkgConfig::PORTAUDIO)
-        set(OLIVIA_PORTAUDIO_TARGET PkgConfig::PORTAUDIO)
+if(TARGET Olivia::PortAudio OR TARGET PkgConfig::PORTAUDIO)
+    if(TARGET Olivia::PortAudio)
+        set(OLIVIA_PORTAUDIO_TARGET Olivia::PortAudio)
     else()
-        set(OLIVIA_PORTAUDIO_TARGET PortAudio::PortAudio)
+        set(OLIVIA_PORTAUDIO_TARGET PkgConfig::PORTAUDIO)
     endif()
     add_library(olivia_audio
         cpp/src/audio_backend.cpp
