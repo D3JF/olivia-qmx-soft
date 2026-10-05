@@ -92,8 +92,9 @@ if(Qt5_FOUND)
         endif()
         target_link_libraries(olivia_gui PRIVATE
         olivia_core
-        Qt5::Widgets
-        Qt5::Network
+            olivia_serial
+            Qt5::Widgets
+            Qt5::Network
     )
     if(TARGET olivia_audio)
         target_link_libraries(olivia_gui PRIVATE olivia_audio)

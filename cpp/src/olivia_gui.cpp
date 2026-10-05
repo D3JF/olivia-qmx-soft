@@ -1,4 +1,8 @@
 #include "olivia_modem.hpp"
+#include "serial_port.hpp"
+#ifdef OLIVIA_HAS_PORTAUDIO
+#include "audio_backend.hpp"
+#endif
 
 #include <QApplication>
 #include <QButtonGroup>
@@ -6,6 +10,7 @@
 #include <QDataStream>
 #include <QDialog>
 #include <QDialogButtonBox>
+#include <QComboBox>
 #include <QFormLayout>
 #include <QGroupBox>
 #include <QHBoxLayout>
@@ -50,6 +55,12 @@ constexpr double pi = 3.14159265358979323846;
 struct Configuration {
     int tones = 8;
     int bandwidth = 250;
+};
+
+struct RealDeviceSelection {
+    QString serial_path;
+    int audio_input = -1;
+    int audio_output = -1;
 };
 
 class SpectrumWidget final : public QWidget {
@@ -638,11 +649,108 @@ std::optional<char> choose_start_mode(bool& real_mode) {
     if (dialog.exec() != QDialog::Accepted) {
         return std::nullopt;
     }
+
     if (real_mode_button->isChecked()) {
         real_mode = true;
         return std::nullopt;
     }
     return station_b->isChecked() ? 'B' : 'A';
+}
+
+std::optional<RealDeviceSelection> choose_real_devices() {
+#ifndef OLIVIA_HAS_PORTAUDIO
+    QMessageBox::warning(
+        nullptr, QStringLiteral("Real mode unavailable"),
+        QStringLiteral(
+            "This build does not include PortAudio. Install PortAudio and "
+            "rebuild with OLIVIA_AUDIO enabled."));
+    return std::nullopt;
+#else
+    const auto serial_devices = olivia::SerialPort::enumerate();
+    olivia::PortAudioBackend audio;
+    const auto audio_devices = audio.devices();
+    if (serial_devices.empty()) {
+        QMessageBox::warning(
+            nullptr, QStringLiteral("No serial devices"),
+            QStringLiteral("No serial ports were found for the QMX+ control "
+                           "connection."));
+        return std::nullopt;
+    }
+
+    QDialog dialog;
+    dialog.setWindowTitle(QStringLiteral("Select QMX+ devices"));
+    dialog.setMinimumWidth(520);
+    auto* layout = new QFormLayout(&dialog);
+    auto* serial_combo = new QComboBox(&dialog);
+    auto* input_combo = new QComboBox(&dialog);
+    auto* output_combo = new QComboBox(&dialog);
+
+    const auto qmx_serial = olivia::SerialPort::find_qmx_port();
+    int serial_index = 0;
+    for (std::size_t index = 0; index < serial_devices.size(); ++index) {
+        const auto& device = serial_devices[index];
+        serial_combo->addItem(
+            QString::fromStdString(device.path + " (" + device.description + ")"),
+            QString::fromStdString(device.path));
+        if (!qmx_serial.empty() && device.path == qmx_serial) {
+            serial_index = static_cast<int>(index);
+        }
+    }
+    serial_combo->setCurrentIndex(serial_index);
+
+    const int qmx_audio =
+        olivia::PortAudioBackend::find_qmx_device(audio_devices);
+    int input_index = -1;
+    int output_index = -1;
+    for (const auto& device : audio_devices) {
+        if (device.input_channels > 0) {
+            input_combo->addItem(QString::fromStdString(device.name),
+                                 device.index);
+            if (device.index == qmx_audio) {
+                input_index = input_combo->count() - 1;
+            }
+        }
+        if (device.output_channels > 0) {
+            output_combo->addItem(QString::fromStdString(device.name),
+                                  device.index);
+            if (device.index == qmx_audio) {
+                output_index = output_combo->count() - 1;
+            }
+        }
+    }
+    if (input_combo->count() == 0 || output_combo->count() == 0) {
+        QMessageBox::warning(
+            nullptr, QStringLiteral("No audio devices"),
+            QStringLiteral("A mono input and output device are required for "
+                           "QMX+ audio."));
+        return std::nullopt;
+    }
+    if (input_index >= 0) {
+        input_combo->setCurrentIndex(input_index);
+    }
+    if (output_index >= 0) {
+        output_combo->setCurrentIndex(output_index);
+    }
+
+    layout->addRow(QStringLiteral("Serial control:"), serial_combo);
+    layout->addRow(QStringLiteral("Audio input:"), input_combo);
+    layout->addRow(QStringLiteral("Audio output:"), output_combo);
+    auto* buttons = new QDialogButtonBox(
+        QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
+    layout->addRow(buttons);
+    QObject::connect(buttons, &QDialogButtonBox::accepted, &dialog,
+                     &QDialog::accept);
+    QObject::connect(buttons, &QDialogButtonBox::rejected, &dialog,
+                     &QDialog::reject);
+
+    if (dialog.exec() != QDialog::Accepted) {
+        return std::nullopt;
+    }
+    return RealDeviceSelection{
+        serial_combo->currentData().toString(),
+        input_combo->currentData().toInt(),
+        output_combo->currentData().toInt()};
+#endif
 }
 
 }  // namespace
@@ -682,10 +790,16 @@ int main(int argc, char** argv) {
         bool real_mode = false;
         const auto selected_station = choose_start_mode(real_mode);
         if (real_mode) {
-            QMessageBox::information(
-                nullptr, QStringLiteral("Real mode"),
-                QStringLiteral(
-                    "Real QMX+ mode is not implemented in the C++ version yet."));
+            const auto selection = choose_real_devices();
+            if (selection.has_value()) {
+                QMessageBox::information(
+                    nullptr, QStringLiteral("Devices selected"),
+                    QStringLiteral("Serial: %1\nAudio input: %2\nAudio output: %3\n"
+                                   "Live Real-mode streaming is the next step.")
+                        .arg(selection->serial_path)
+                        .arg(selection->audio_input)
+                        .arg(selection->audio_output));
+            }
             return 0;
         }
         if (!selected_station.has_value()) {
