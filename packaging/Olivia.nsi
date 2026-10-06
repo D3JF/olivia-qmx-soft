@@ -1,5 +1,5 @@
 !define APP_NAME "Olivia QMX+"
-!define APP_VERSION "0.1.0"
+!define APP_VERSION "0.1.1"
 !define APP_DIR "..\olivia-gui-windows-x64"
 
 Name "${APP_NAME}"

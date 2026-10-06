@@ -136,9 +136,13 @@ cpack --config build-windows/CPackConfig.cmake
 ```
 
 This creates an NSIS installer in `build-windows`. The installer deploys the
-Qt and MinGW runtime DLLs alongside `olivia_gui.exe`, and installs the
-simulator, real-mode GUI, and serial/audio-information tools in the same
-directory. The PortAudio SDK must provide `include\portaudio.h`,
+Qt and MinGW compiler runtime DLLs, including `libwinpthread-1.dll`, alongside
+`olivia_gui.exe`, and installs
+the simulator, real-mode GUI, and serial/audio-information tools in the same
+directory. Always distribute this CPack-generated installer rather than
+packaging only the executable files manually; the compiler runtime is required
+on machines that do not already have the MinGW toolchain installed. The
+PortAudio SDK must provide `include\portaudio.h`,
 `lib\libportaudio.dll.a` (or `portaudio.lib`), and the matching
 `libportaudio.dll`.
 
@@ -162,10 +166,10 @@ ctest --test-dir build-linux --output-on-failure
 ```
 
 This creates an architecture-specific `.deb` file in `build-linux` (for
-example, `olivia-qmx-plus_0.1.0_amd64.deb`). Install it with:
+example, `olivia-qmx-plus_0.1.1_amd64.deb`). Install it with:
 
 ```bash
-sudo apt install ./olivia-qmx-plus_0.1.0_*.deb
+sudo apt install ./olivia-qmx-plus_0.1.1_*.deb
 ```
 
 The package installs the GUI, simulator, serial/audio information tools, a
@@ -195,10 +199,10 @@ the RPM explicitly:
 ```
 
 This creates an architecture-specific package such as
-`olivia-qmx-plus-0.1.0-1.x86_64.rpm`. Install it with:
+`olivia-qmx-plus-0.1.1-1.x86_64.rpm`. Install it with:
 
 ```bash
-sudo dnf install ./olivia-qmx-plus-0.1.0-1.*.rpm
+sudo dnf install ./olivia-qmx-plus-0.1.1-1.*.rpm
 ```
 
 CPack's RPM dependency scan records the Qt, PortAudio, C++ runtime, and system

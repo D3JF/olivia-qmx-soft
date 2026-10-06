@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.16)
 
-project(olivia_qmx_cpp VERSION 0.1.0 LANGUAGES CXX)
+project(olivia_qmx_cpp VERSION 0.1.1 LANGUAGES CXX)
 
 include(CTest)
 include(GNUInstallDirs)
@@ -235,6 +235,32 @@ if(WIN32 AND OLIVIA_BUILD_INSTALLER)
                 \"windeployqt failed with exit code \\\${deploy_result}\")
         endif()
     ")
+
+    # windeployqt does not always locate MinGW's POSIX threading runtime.
+    # Install the MinGW runtime DLLs explicitly so the bundle also works on
+    # machines without a MinGW installation.
+    get_filename_component(OLIVIA_CXX_COMPILER_DIR
+        "${CMAKE_CXX_COMPILER}" DIRECTORY)
+    foreach(OLIVIA_MINGW_RUNTIME
+            libgcc_s_seh-1.dll
+            libstdc++-6.dll
+            libwinpthread-1.dll)
+        find_file(OLIVIA_MINGW_RUNTIME_FILE
+            NAMES "${OLIVIA_MINGW_RUNTIME}"
+            HINTS
+                "${Qt5Core_DIR}/../../../bin"
+                "${OLIVIA_CXX_COMPILER_DIR}"
+            NO_DEFAULT_PATH
+        )
+        if(OLIVIA_MINGW_RUNTIME_FILE)
+            install(FILES "${OLIVIA_MINGW_RUNTIME_FILE}" DESTINATION .)
+        elseif(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+            message(FATAL_ERROR
+                "Could not find required MinGW runtime "
+                "${OLIVIA_MINGW_RUNTIME}.")
+        endif()
+        unset(OLIVIA_MINGW_RUNTIME_FILE CACHE)
+    endforeach()
 endif()
 
 set(CPACK_PACKAGE_NAME "Olivia QMX+")
