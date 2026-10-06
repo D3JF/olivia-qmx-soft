@@ -27,3 +27,7 @@ Olivia-QMX+-*-win64-setup.exe
 olivia-qmx-plus_*.deb
 Olivia QMX+-*-Linux.deb
 _CPack_Packages/
+
+# Locally generated RPM packages.
+olivia-qmx-plus-*.rpm
+Olivia QMX+-*.rpm

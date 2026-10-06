@@ -176,3 +176,31 @@ by the distribution and are not bundled into the package.
 For a simulator-only package without PortAudio, use
 `-DOLIVIA_AUDIO=OFF`. If Qt5 development files are unavailable, CMake still
 builds the console tools but does not include the GUI or desktop entry.
+
+## Red Hat-based package
+
+On Fedora, RHEL, Rocky Linux, or AlmaLinux, install the native build
+dependencies and RPM tooling:
+
+```bash
+sudo dnf install gcc-c++ cmake rpm-build pkgconf-pkg-config \
+    qt5-qtbase-devel portaudio-devel
+```
+
+Use the same CMake configuration and build commands shown above, then create
+the RPM explicitly:
+
+```bash
+(cd build-linux && cpack -G RPM)
+```
+
+This creates an architecture-specific package such as
+`olivia-qmx-plus-0.1.0-1.x86_64.rpm`. Install it with:
+
+```bash
+sudo dnf install ./olivia-qmx-plus-0.1.0-1.*.rpm
+```
+
+CPack's RPM dependency scan records the Qt, PortAudio, C++ runtime, and system
+library requirements provided by the target distribution. The RPM does not
+bundle those system libraries.
