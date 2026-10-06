@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Olivia QMX+
+Comment=Olivia MFSK terminal for the QRP Labs QMX+
+Exec=olivia_gui
+Icon=olivia
+Terminal=false
+Categories=HamRadio;AudioVideo;

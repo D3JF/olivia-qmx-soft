@@ -141,3 +141,38 @@ simulator, real-mode GUI, and serial/audio-information tools in the same
 directory. The PortAudio SDK must provide `include\portaudio.h`,
 `lib\libportaudio.dll.a` (or `portaudio.lib`), and the matching
 `libportaudio.dll`.
+
+## Debian and Ubuntu package
+
+On Debian or Ubuntu, install the native build dependencies:
+
+```bash
+sudo apt install build-essential cmake dpkg-dev pkg-config \
+    qtbase5-dev portaudio19-dev
+```
+
+Configure and build a release package with the GUI and real-mode audio support:
+
+```bash
+cmake -S . -B build-linux -DCMAKE_BUILD_TYPE=Release \
+    -DBUILD_TESTING=ON -DOLIVIA_AUDIO=ON
+cmake --build build-linux
+ctest --test-dir build-linux --output-on-failure
+(cd build-linux && cpack --config CPackConfig.cmake)
+```
+
+This creates an architecture-specific `.deb` file in `build-linux` (for
+example, `olivia-qmx-plus_0.1.0_amd64.deb`). Install it with:
+
+```bash
+sudo apt install ./olivia-qmx-plus_0.1.0_*.deb
+```
+
+The package installs the GUI, simulator, serial/audio information tools, a
+desktop menu entry, and the application icon. Debian's shared-library scan
+records the Qt and PortAudio runtime dependencies; those libraries are provided
+by the distribution and are not bundled into the package.
+
+For a simulator-only package without PortAudio, use
+`-DOLIVIA_AUDIO=OFF`. If Qt5 development files are unavailable, CMake still
+builds the console tools but does not include the GUI or desktop entry.

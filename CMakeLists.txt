@@ -9,6 +9,12 @@ option(OLIVIA_BUILD_INSTALLER
     "Prepare a Windows installer with Qt and compiler runtimes"
     ${WIN32})
 
+if(WIN32)
+    set(OLIVIA_RUNTIME_INSTALL_DIR ".")
+else()
+    set(OLIVIA_RUNTIME_INSTALL_DIR "${CMAKE_INSTALL_BINDIR}")
+endif()
+
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
@@ -106,19 +112,29 @@ if(Qt5_FOUND)
         cpp/src/olivia_gui.cpp
         resources/olivia.qrc
     )
-        if(WIN32)
-            target_sources(olivia_gui PRIVATE
-                resources/olivia.rc
-            )
-            set_target_properties(olivia_gui PROPERTIES
-                WIN32_EXECUTABLE TRUE
-            )
-        endif()
-        target_link_libraries(olivia_gui PRIVATE
+    if(WIN32)
+        target_sources(olivia_gui PRIVATE
+            resources/olivia.rc
+        )
+        set_target_properties(olivia_gui PROPERTIES
+            WIN32_EXECUTABLE TRUE
+        )
+    else()
+        install(FILES
+            packaging/olivia.desktop
+            DESTINATION "${CMAKE_INSTALL_DATAROOTDIR}/applications"
+        )
+        install(FILES
+            resources/olivia-icon.svg
+            DESTINATION "${CMAKE_INSTALL_DATAROOTDIR}/icons/hicolor/scalable/apps"
+            RENAME olivia.svg
+        )
+    endif()
+    target_link_libraries(olivia_gui PRIVATE
         olivia_core
-            olivia_serial
-            Qt5::Widgets
-            Qt5::Network
+        olivia_serial
+        Qt5::Widgets
+        Qt5::Network
     )
     if(TARGET olivia_audio)
         target_sources(olivia_gui PRIVATE
@@ -153,16 +169,16 @@ if(BUILD_TESTING)
 endif()
 
 install(TARGETS olivia_app olivia_serial_info
-    RUNTIME DESTINATION .
+    RUNTIME DESTINATION "${OLIVIA_RUNTIME_INSTALL_DIR}"
 )
 if(TARGET olivia_gui)
     install(TARGETS olivia_gui
-        RUNTIME DESTINATION .
+        RUNTIME DESTINATION "${OLIVIA_RUNTIME_INSTALL_DIR}"
     )
 endif()
 if(TARGET olivia_audio_info)
     install(TARGETS olivia_audio_info
-        RUNTIME DESTINATION .
+        RUNTIME DESTINATION "${OLIVIA_RUNTIME_INSTALL_DIR}"
     )
 endif()
 install(FILES
@@ -238,5 +254,14 @@ if(WIN32)
         "https://github.com/D3JF/olivia-qmx-soft")
     set(CPACK_NSIS_MODIFY_PATH OFF)
     set(CPACK_NSIS_MENU_LINKS "olivia_gui.exe" "Olivia QMX+")
+elseif(UNIX)
+    set(CPACK_GENERATOR "DEB")
+    set(CPACK_DEBIAN_PACKAGE_NAME "olivia-qmx-plus")
+    set(CPACK_DEBIAN_PACKAGE_MAINTAINER "D3JF")
+    set(CPACK_DEBIAN_PACKAGE_SECTION "hamradio")
+    set(CPACK_DEBIAN_PACKAGE_HOMEPAGE
+        "https://github.com/D3JF/olivia-qmx-soft")
+    set(CPACK_DEBIAN_PACKAGE_SHLIBDEPS ON)
+    set(CPACK_DEBIAN_FILE_NAME "DEB-DEFAULT")
 endif()
 include(CPack)
