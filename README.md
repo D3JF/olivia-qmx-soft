@@ -1,5 +1,9 @@
 # Olivia QMX+
 
+<p align="center">
+  <img src="resources/olivia-icon.svg" alt="Olivia MFSK icon" width="180">
+</p>
+
 This is a small configurable Olivia MFSK terminal for a QRP Labs QMX+.
 The maintained application is a portable C++17 program that can run against a
 real QMX+ or in simulator mode with two local stations.
