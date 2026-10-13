@@ -13,6 +13,8 @@ real QMX+ or in simulator mode with two local stations.
 **I vibe coded this.** __Please don't stone me to death__. I had to make a
 quick prototype and it turns out that GitHub Copilot is pretty good now.
 
+**IT DOEES NOT WORK WITH A REAL RADIO YET!** Only the simulation works. I have to rewrite the whole thing without AI.
+
 ## License
 
 This project is licensed under the GNU General Public License, version 3 or
